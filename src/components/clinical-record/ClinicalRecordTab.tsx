@@ -8,21 +8,24 @@ import {
   deleteClinicalRecord,
   useProcedures,
   useSupplies,
-  useOdontogramEntries
+  useOdontogramEntries,
+  usePatients
 } from "@/lib/db";
 import { ClinicalRecord, ClinicalRecordSupply, uid } from "@/lib/store";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { sendWhatsAppMessage, getWhatsAppTemplates, renderWhatsAppTemplate } from "@/lib/whatsapp";
 
 interface Props {
   patientId: string;
 }
 
 export function ClinicalRecordTab({ patientId }: Props) {
-  const [records, error, loading, tablesMissing] = useClinicalRecords(patientId);
+  const [records, error, loading, tablesMissing, refetch] = useClinicalRecords(patientId);
   const [procedures] = useProcedures();
   const [supplies] = useSupplies();
   const [odontogramEntries] = useOdontogramEntries(patientId);
+  const [patients] = usePatients();
   const [subTab, setSubTab] = useState<'evolutions' | 'odontogram'>('evolutions');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -40,7 +43,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
       if (isNewEvolution) {
         const dateParam = params.get("date") || new Date().toISOString().split("T")[0];
         const notesParam = params.get("notes") || "";
-        const procIdParam = params.get("procId") || "";
+        const procIdParam = params.get("procId") || params.get("procedureId") || "";
 
         // Set draft
         const selectedProc = procedures.find(p => p.id === procIdParam);
@@ -51,7 +54,46 @@ export function ClinicalRecordTab({ patientId }: Props) {
           chargedAmount: selectedProc && selectedProc.suggestedPrice !== undefined ? selectedProc.suggestedPrice : 0,
           teeth: []
         });
-        setDraftSupplies([]);
+
+        // Load default supplies if procedure is provided
+        if (procIdParam) {
+          supabase.auth.getUser().then(({ data: userData }) => {
+            if (userData.user) {
+              supabase
+                .from("procedure_supplies")
+                .select("supply_id, quantity")
+                .eq("procedure_id", procIdParam)
+                .eq("user_id", userData.user.id)
+                .then(({ data }) => {
+                  if (data && data.length > 0) {
+                    const newSupplies: Partial<ClinicalRecordSupply>[] = data.map(ps => {
+                      const supplyDef = supplies.find(s => s.id === ps.supply_id);
+                      const qty = ps.quantity || 1;
+                      let unitCost = 0;
+                      if (supplyDef && supplyDef.packYield && supplyDef.packCost) {
+                        unitCost = supplyDef.packCost / supplyDef.packYield;
+                      }
+                      return {
+                        id: `temp-${uid()}`,
+                        supplyId: ps.supply_id,
+                        quantityUsed: qty,
+                        unitCost: unitCost,
+                        totalCost: unitCost * qty,
+                        supplyName: supplyDef?.name || "Insumo desconhecido"
+                      };
+                    });
+                    setDraftSupplies(newSupplies);
+                    toast.success(`${newSupplies.length} insumo(s) padrão adicionado(s).`);
+                  } else {
+                    setDraftSupplies([]);
+                  }
+                });
+            }
+          });
+        } else {
+          setDraftSupplies([]);
+        }
+
         setIsModalOpen(true);
 
         // Clear the query parameters from URL so they don't trigger again on reload
@@ -60,12 +102,13 @@ export function ClinicalRecordTab({ patientId }: Props) {
         newParams.delete("date");
         newParams.delete("notes");
         newParams.delete("procId");
+        newParams.delete("procedureId");
         const newSearch = newParams.toString();
         const newUrl = window.location.pathname + (newSearch ? "?" + newSearch : "");
         window.history.replaceState(null, "", newUrl);
       }
     }
-  }, [procedures]);
+  }, [procedures, supplies, typeof window !== "undefined" ? window.location.search : ""]);
 
   if (loading) {
     return (
@@ -283,6 +326,20 @@ export function ClinicalRecordTab({ patientId }: Props) {
       await saveClinicalRecord(newRecord, finalSupplies);
       toast.success("Evolução clínica salva com sucesso!");
       setIsModalOpen(false);
+
+      const patientDef = patients.find(p => p.id === patientId);
+      const phone = patientDef?.phone || patientDef?.whatsapp || "";
+      if (phone) {
+        const goWhatsApp = window.confirm("Deseja enviar orientações pós-atendimento via WhatsApp para o paciente?");
+        if (goWhatsApp) {
+          const params = new URLSearchParams({
+            patientId: patientId,
+            templateId: "tpl-pos-atendimento"
+          });
+          window.location.href = `/whatsapp?${params.toString()}`;
+          return;
+        }
+      }
       window.location.reload();
     } catch (err: any) {
       toast.error("Erro ao salvar evolução: " + err.message);
@@ -290,14 +347,12 @@ export function ClinicalRecordTab({ patientId }: Props) {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Tem certeza que deseja apagar permanentemente esta evolução?")) {
-      try {
-        await deleteClinicalRecord(id);
-        toast.success("Evolução apagada.");
-        window.location.reload();
-      } catch (err: any) {
-        toast.error("Erro ao apagar: " + err.message);
-      }
+    try {
+      await deleteClinicalRecord(id);
+      toast.success("Evolução excluída.");
+      refetch();
+    } catch (err: any) {
+      toast.error("Não foi possível excluir agora.");
     }
   };
 
@@ -436,13 +491,23 @@ export function ClinicalRecordTab({ patientId }: Props) {
                 <Card className="p-5 hover:border-gold/50 transition-colors">
                   <div className="flex flex-col sm:flex-row gap-4 justify-between items-start">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
+                      <div className="flex flex-wrap items-center gap-2 mb-2">
                         <Badge tone="neutral" className="flex items-center gap-1 font-medium">
                           <Calendar className="w-3 h-3" />
                           {new Date(record.recordDate).toLocaleDateString()}
                         </Badge>
                         {record.procedureName && (
                           <Badge tone="gold" className="capitalize">{record.procedureName}</Badge>
+                        )}
+                        {record.procedureId && (
+                          <Badge tone="neutral" className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold py-0.5 px-2">
+                            Agenda Vinculada
+                          </Badge>
+                        )}
+                        {record.chargedAmount > 0 && (
+                          <Badge tone="neutral" className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold py-0.5 px-2">
+                            Financeiro Integrado
+                          </Badge>
                         )}
                       </div>
                       
@@ -452,9 +517,14 @@ export function ClinicalRecordTab({ patientId }: Props) {
                         </p>
                       )}
 
-                      <p className="text-sm whitespace-pre-wrap mb-4">
+                      <p className="text-sm whitespace-pre-wrap mb-2">
                         {record.description || <span className="italic text-muted-foreground">Sem descrição</span>}
                       </p>
+                      {record.signature && (
+                        <p className="text-xs text-muted-foreground mb-4 italic">
+                          Profissional: {record.signature}
+                        </p>
+                      )}
 
                       {record.supplies && record.supplies.length > 0 && (
                         <div className="bg-secondary/30 rounded p-3 mb-3 text-xs text-muted-foreground">
@@ -485,12 +555,12 @@ export function ClinicalRecordTab({ patientId }: Props) {
                       </div>
                     </div>
                     
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <Button variant="ghost" size="sm" onClick={() => openEditRecordModal(record)}>
-                        <Edit3 className="w-4 h-4 text-muted-foreground" />
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto">
+                      <Button variant="outline" size="sm" className="h-8 text-xs font-semibold" onClick={() => openEditRecordModal(record)}>
+                        <Edit3 className="w-3.5 h-3.5 mr-1" /> Editar
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={() => handleDelete(record.id)}>
-                        <Trash2 className="w-4 h-4" />
+                      <Button variant="outline" size="sm" className="h-8 text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-transparent hover:border-rose-200 font-semibold" onClick={() => handleDelete(record.id)}>
+                        <Trash2 className="w-3.5 h-3.5 mr-1" /> Excluir
                       </Button>
                     </div>
                   </div>

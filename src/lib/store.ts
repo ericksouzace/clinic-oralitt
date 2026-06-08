@@ -288,6 +288,43 @@ export interface PaymentSplit {
   createdAt: string;
 }
 
+export type PatientFileType = 'foto_clinica' | 'documento';
+
+export interface PatientFile {
+  id: string;
+  userId: string;
+  patientId?: string | null;
+  fileName: string;
+  filePath: string;
+  fileSize: number;
+  contentType: string;
+  fileType: PatientFileType;
+  category: string;
+  status: string;
+  notes?: string;
+  // OCR fields
+  ocrStatus?: string;
+  extractedText?: string;
+  ocrDestinationSuggestion?: string;
+  isOcrProcessed?: boolean;
+  reviewedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  
+  // Virtual for UI
+  url?: string;
+}
+
+export const PHOTO_CATEGORIES = [
+  "intraoral", "extraoral", "sorriso", "antes", "depois", 
+  "radiografia", "procedimento", "evolução", "outro"
+];
+
+export const DOCUMENT_CATEGORIES = [
+  "contrato", "termo", "exame", "radiografia", "receita", 
+  "atestado", "orçamento", "comprovante", "documento pessoal", "outro"
+];
+
 export type FixedCostFrequency = "mensal" | "anual" | "bimestral" | "trimestral" | "semestral";
 
 export type SupplyUsage = { supplyId: string; qty: number };

@@ -1,10 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select } from "@/components/ui-bits";
-import { Plus, X, AlertCircle, DollarSign, Calendar, RefreshCcw, Eye, Trash2, Edit3, Receipt, CreditCard, FileText, Check } from "lucide-react";
+import { Plus, X, AlertCircle, DollarSign, Calendar, RefreshCcw, Eye, Trash2, Edit3, Receipt, CreditCard, FileText, Check, MessageCircle } from "lucide-react";
 import { formatCurrency, formatDateBR } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -19,9 +19,11 @@ import {
   useProcedures,
   deletePayment,
   updateInstallmentStatus,
-  useTreatmentPlans
+  useTreatmentPlans,
+  usePatients
 } from "@/lib/db";
 import { Budget, BudgetItem, PaymentInstallment, Payment, PaymentSplit, Procedure, uid } from "@/lib/store";
+import { sendWhatsAppMessage, getWhatsAppTemplates, renderWhatsAppTemplate } from "@/lib/whatsapp";
 
 type SubTab = "resumo" | "orcamentos" | "parcelas" | "pagamentos" | "acoes";
 
@@ -31,6 +33,41 @@ export function FinanceTab({ patientId }: { patientId: string }) {
   const [payments, pLoading] = usePayments(patientId);
   const [procedures] = useProcedures();
   const [plans, plansError, plansLoading] = useTreatmentPlans(patientId);
+  const [patients] = usePatients();
+  
+  const patient = patients.find(p => p.id === patientId);
+
+  const handleSendBudgetWhatsApp = async (b: Budget) => {
+    if (!patient) return toast.error("Paciente não carregado.");
+    const rawPhone = patient.phone || patient.whatsapp || "";
+    if (!rawPhone) return toast.error("Paciente sem telefone cadastrado.");
+
+    const params = new URLSearchParams({
+      patientId: patientId,
+      templateId: "tpl-orcamento-enviado",
+      plano_nome: b.title || "Tratamento",
+      valor: formatCurrency(b.finalAmount)
+    });
+
+    window.location.href = `/whatsapp?${params.toString()}`;
+  };
+
+  const handleSendInstallmentWhatsApp = async (inst: PaymentInstallment, isOverdue: boolean) => {
+    if (!patient) return toast.error("Paciente não carregado.");
+    const rawPhone = patient.phone || patient.whatsapp || "";
+    if (!rawPhone) return toast.error("Paciente sem telefone cadastrado.");
+
+    const tplId = isOverdue ? "tpl-parcela-vencida" : "tpl-parcela-vencendo";
+    
+    const params = new URLSearchParams({
+      patientId: patientId,
+      templateId: tplId,
+      valor: formatCurrency(inst.amount),
+      data_vencimento: inst.dueDate ? formatDateBR(inst.dueDate) : "dd/mm/aaaa"
+    });
+
+    window.location.href = `/whatsapp?${params.toString()}`;
+  };
 
   const [subTab, setSubTab] = useState<SubTab>("resumo");
 
@@ -245,6 +282,9 @@ export function FinanceTab({ patientId }: { patientId: string }) {
                         <Button variant="outline" className="!bg-gray-100 hover:!bg-gray-200 !text-gray-700 hover:!text-gray-900 !border-gray-200 h-8 px-2 text-xs font-semibold" onClick={() => setBudgetModal(b)}>
                           <Edit3 className="w-3.5 h-3.5 mr-1" /> Editar
                         </Button>
+                        <Button variant="outline" className="!bg-white !border border-emerald-600 !text-emerald-700 hover:!bg-emerald-50 h-8 px-2 text-xs font-semibold" onClick={() => handleSendBudgetWhatsApp(b)}>
+                          <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+                        </Button>
                         {b.status === "rascunho" && (
                           <Button variant="outline" className="!bg-white !border border-emerald-500 !text-emerald-600 hover:!bg-emerald-50 hover:!text-emerald-700 h-8 px-2 text-xs font-semibold" onClick={async () => {
                             try { await updateBudgetStatus(b.id, "aprovado"); toast.success("Orçamento aprovado!"); window.location.reload(); }
@@ -279,9 +319,13 @@ export function FinanceTab({ patientId }: { patientId: string }) {
                           <Calendar className="w-3.5 h-3.5 mr-1" /> Parcelar
                         </Button>
                         <Button variant="outline" className="!bg-white !border border-red-500 !text-red-500 hover:!bg-red-50 hover:!text-red-600 h-8 px-2 text-xs font-semibold" onClick={async () => {
-                          if (confirm("Excluir este orçamento e todos os seus itens?")) {
-                            try { await deleteBudget(b.id); toast.success("Orçamento excluído."); window.location.reload(); }
-                            catch (e: any) { console.error(e); toast.error("Erro: " + e.message); }
+                          try { 
+                            await deleteBudget(b.id); 
+                            toast.success("Orçamento excluído."); 
+                            window.location.reload(); 
+                          } catch (e: any) { 
+                            console.error(e); 
+                            toast.error("Não foi possível excluir agora."); 
                           }
                         }}>
                           <Trash2 className="w-3.5 h-3.5 mr-1" /> Excluir
@@ -366,18 +410,24 @@ export function FinanceTab({ patientId }: { patientId: string }) {
                               Editar
                             </Button>
                             {canAct && (
+                              <Button variant="outline" className="!bg-white !border border-emerald-600 !text-emerald-700 hover:!bg-emerald-50 h-8 px-2 text-xs font-semibold" onClick={() => handleSendInstallmentWhatsApp(inst, isOverdue)}>
+                                <MessageCircle className="w-3.5 h-3.5 mr-1" /> Cobrar
+                              </Button>
+                            )}
+                            {canAct && (
                               <Button variant="outline" className="!bg-white !border border-[#C9A227] !text-[#8A6A16] hover:!bg-[#faf9f5] hover:!text-[#b59122] h-8 px-2 text-xs font-semibold" onClick={() => setRenegotiateModal(inst)}>
                                 Renegociar
                               </Button>
                             )}
                             {canAct && (
                               <Button variant="outline" className="!bg-white !border border-red-500 !text-red-500 hover:!bg-red-50 hover:!text-red-600 h-8 px-2 text-xs font-semibold" onClick={async () => {
-                                if (confirm("Cancelar esta parcela?")) {
-                                  try {
-                                    await updateInstallmentStatus(inst.id, { status: "cancelado" });
-                                    toast.success("Parcela cancelada.");
-                                    window.location.reload();
-                                  } catch (e: any) { console.error(e); toast.error("Erro: " + e.message); }
+                                try {
+                                  await updateInstallmentStatus(inst.id, { status: "cancelado" });
+                                  toast.success("Parcela cancelada.");
+                                  window.location.reload();
+                                } catch (e: any) { 
+                                  console.error(e); 
+                                  toast.error("Não foi possível excluir agora."); 
                                 }
                               }}>
                                 Cancelar
@@ -441,9 +491,13 @@ export function FinanceTab({ patientId }: { patientId: string }) {
                             <Eye className="w-3.5 h-3.5 mr-1" /> Ver detalhes
                           </Button>
                           <Button variant="outline" className="!bg-white !border border-red-500 !text-red-500 hover:!bg-red-50 hover:!text-red-600 h-8 px-2 text-xs font-semibold" onClick={async () => {
-                            if (confirm("Excluir este pagamento? A parcela vinculada será recalculada.")) {
-                              try { await deletePayment(p); toast.success("Pagamento excluído."); window.location.reload(); }
-                              catch (e: any) { console.error(e); toast.error("Erro: " + e.message); }
+                            try { 
+                              await deletePayment(p); 
+                              toast.success("Pagamento excluído."); 
+                              window.location.reload(); 
+                            } catch (e: any) { 
+                              console.error(e); 
+                              toast.error("Não foi possível excluir agora."); 
                             }
                           }}>
                             <Trash2 className="w-3.5 h-3.5" />

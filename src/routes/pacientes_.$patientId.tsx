@@ -1,15 +1,19 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
-import { ArrowLeft, Edit3, Calendar, Phone, Activity, FileText, DollarSign, Image as ImageIcon, Plus, ClipboardList, CheckCircle, Trash2, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ArrowLeft, Edit3, Calendar, Phone, Activity, FileText, DollarSign, Image as ImageIcon, Plus, ClipboardList, CheckCircle, Trash2, Clock, MessageCircle } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import { PageHeader, Card, Button, Badge, Input, Label, Select, Textarea } from "@/components/ui-bits";
 import { Patient, Anamnesis, AnamnesisStatus, ANAMNESIS_STATUS, OdontogramEntry, TOOTH_REGIONS, TOOTH_STATUS } from "@/lib/store";
-import { usePatients, useAnamneses, useOdontogramEntries, useAppointments } from "@/lib/db";
+import { usePatients, useAnamneses, useOdontogramEntries, useAppointments, useBudgets, usePayments, useClinicalRecords } from "@/lib/db";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { OdontogramTab } from "@/components/odontogram/OdontogramTab";
 import { TreatmentPlanTab } from "@/components/treatment-plan/TreatmentPlanTab";
 import { ClinicalRecordTab } from "@/components/clinical-record/ClinicalRecordTab";
 import { FinanceTab } from "@/components/finance/FinanceTab";
+import { getWhatsAppLogs } from "@/lib/whatsapp";
+import { ClinicalPhotosTab } from "@/components/patient-files/ClinicalPhotosTab";
+import { DocumentsTab } from "@/components/patient-files/DocumentsTab";
+import { toast } from "sonner";
 
 
 
@@ -50,6 +54,36 @@ function PatientProfilePage() {
   const [anamneses, setAnamneses, loadingAnamnesis, errorAnamnesis] = useAnamneses(patientId);
   const [odontEntries] = useOdontogramEntries(patientId);
   const [appointments] = useAppointments(patientId);
+  const [budgets] = useBudgets(patientId);
+  const [payments] = usePayments(patientId);
+  const [clinicalRecords] = useClinicalRecords(patientId);
+
+  // ── Financial and Clinical Calculations for Resume ───────────────────────
+  const approvedBudgets = budgets ? budgets.filter(b => b.status === "aprovado") : [];
+  const totalOrcado = approvedBudgets.reduce((sum, b) => sum + (b.finalAmount || 0), 0);
+  const totalPago = payments ? payments.reduce((sum, p) => sum + (p.amount || 0), 0) : 0;
+  const saldoDevedor = Math.max(0, totalOrcado - totalPago);
+
+  const latestEvolution = clinicalRecords && clinicalRecords.length > 0 ? clinicalRecords[0] : null;
+
+  const [patientLogs, setPatientLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadLogs() {
+      try {
+        const { logs: allLogs } = await getWhatsAppLogs();
+        if (active) {
+          const filtered = allLogs.filter(l => l.patientId === patientId);
+          setPatientLogs(filtered);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    loadLogs();
+    return () => { active = false; };
+  }, [patientId]);
 
   // Filter next and past appointments for resume tab
   const nextAppt = appointments.find(a => {
@@ -90,6 +124,16 @@ function PatientProfilePage() {
       router.invalidate();
     }
   };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab") as TabType;
+      if (tab && TAB_MAP[tab] && tab !== activeTab) {
+        setActiveTabState(tab);
+      }
+    }
+  }, [router.state.location.search, activeTab]);
   
   const [anamnesisDraft, setAnamnesisDraft] = useState<Anamnesis | null>(null);
 
@@ -327,7 +371,7 @@ function PatientProfilePage() {
                   if (isNew) return [draft, ...prev];
                   return prev.map(a => a.id === draft.id ? draft : a);
                 });
-                alert("Anamnese " + (isNew ? "salva" : "atualizada") + " com sucesso.");
+                toast.success("Anamnese " + (isNew ? "salva" : "atualizada") + " com sucesso.");
                 setAnamnesisDraft(null);
               }}>
                 <CheckCircle className="h-4 w-4 mr-2" /> Salvar Anamnese
@@ -409,6 +453,62 @@ function PatientProfilePage() {
                     <dd className="text-sm bg-secondary/50 p-3 rounded-lg border border-border/50">{patient.administrativeNotes}</dd>
                   </div>
                 )}
+              </Card>
+
+              <Card className="p-5 mt-4">
+                <h3 className="font-display font-bold mb-4 flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-[#C9A227]" /> Comunicações
+                </h3>
+                
+                <div className="text-xs space-y-4">
+                  <div className="flex justify-between items-center bg-gray-50 border p-2.5 rounded-lg">
+                    <span className="font-semibold text-gray-700">Consentimento de Disparo:</span>
+                    <Badge tone="ok">Autorizado</Badge>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Histórico de WhatsApp</span>
+                    {patientLogs.length === 0 ? (
+                      <p className="text-muted-foreground italic text-[11px] py-3 text-center border border-dashed rounded bg-gray-50/50">
+                        Nenhuma mensagem enviada.
+                      </p>
+                    ) : (
+                      <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5">
+                        {patientLogs.map((l, idx) => (
+                          <div key={l.id || idx} className="p-2 border rounded bg-white text-[11px] space-y-1 hover:border-gold/30 transition">
+                            <div className="flex justify-between items-center gap-2">
+                              <span className="text-muted-foreground font-semibold">
+                                {new Date(l.createdAt).toLocaleDateString("pt-BR")}
+                              </span>
+                              <Badge tone={
+                                l.status === "enviada" || l.status === "aberta_manual" ? "ok" : 
+                                l.status === "simulada" ? "neutral" : "danger"
+                              } className="text-[8px] px-1 py-0">
+                                {l.status === "aberta_manual" ? "Manual" : l.status === "simulada" ? "Simulada" : l.status}
+                              </Badge>
+                            </div>
+                            <p className="line-clamp-2 text-gray-600 leading-relaxed italic">"{l.message}"</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs h-8 font-bold mt-2"
+                    onClick={() => {
+                      router.navigate({
+                        to: "/whatsapp",
+                        search: {
+                          tab: "history"
+                        } as any
+                      });
+                    }}
+                  >
+                    Abrir na Central WhatsApp
+                  </Button>
+                </div>
               </Card>
             </div>
             
@@ -522,15 +622,68 @@ function PatientProfilePage() {
                   </div>
                 )}
               </Card>
-              <Card className="p-5 flex flex-col justify-center items-center text-center h-32 bg-secondary/20 border-dashed border-2">
-                <DollarSign className="h-6 w-6 text-gold mb-2" />
-                <h4 className="font-semibold text-sm">Orçamentos / Financeiro</h4>
-                <p className="text-xs text-muted-foreground mt-1">Em breve</p>
+              <Card className="p-5 flex flex-col justify-between h-auto min-h-[160px] bg-white border border-border">
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-2 mb-3 text-gray-800">
+                    <DollarSign className="h-4 w-4 text-gold" />
+                    Resumo Financeiro
+                  </h4>
+                  <div className="grid grid-cols-3 gap-2 text-center mt-2">
+                    <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">Orçado</span>
+                      <span className="text-xs font-bold text-gray-700 block mt-0.5">R$ {totalOrcado.toFixed(2)}</span>
+                    </div>
+                    <div className="bg-emerald-50/50 p-2 rounded border border-emerald-100">
+                      <span className="text-[10px] text-emerald-700 font-semibold block uppercase">Pago</span>
+                      <span className="text-xs font-bold text-emerald-600 block mt-0.5">R$ {totalPago.toFixed(2)}</span>
+                    </div>
+                    <div className="bg-rose-50/50 p-2 rounded border border-rose-100">
+                      <span className="text-[10px] text-rose-700 font-semibold block uppercase">A Pagar</span>
+                      <span className="text-xs font-bold text-rose-600 block mt-0.5">R$ {saldoDevedor.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-xs h-8 font-semibold mt-4"
+                  onClick={() => setActiveTab("financeiro")}
+                >
+                  Ver financeiro detalhado
+                </Button>
               </Card>
-              <Card className="p-5 flex flex-col justify-center items-center text-center h-32 bg-secondary/20 border-dashed border-2">
-                <ImageIcon className="h-6 w-6 text-gold mb-2" />
-                <h4 className="font-semibold text-sm">Imagens e Arquivos</h4>
-                <p className="text-xs text-muted-foreground mt-1">Em breve</p>
+              <Card className="p-5 flex flex-col justify-between h-auto min-h-[160px] bg-white border border-border">
+                <div>
+                  <h4 className="font-semibold text-sm flex items-center gap-2 mb-3 text-gray-800">
+                    <ClipboardList className="h-4 w-4 text-gold" />
+                    Última Evolução Clínica
+                  </h4>
+                  {latestEvolution ? (
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+                        <span>{new Date(latestEvolution.recordDate).toLocaleDateString()}</span>
+                        {latestEvolution.procedureName && (
+                          <Badge tone="gold" className="text-[9px] py-0">{latestEvolution.procedureName}</Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-700 line-clamp-2 mt-1 leading-relaxed">
+                        {latestEvolution.description}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground my-auto text-center italic">
+                      Nenhuma evolução registrada.
+                    </p>
+                  )}
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="w-full text-xs h-8 font-semibold mt-4"
+                  onClick={() => setActiveTab("ficha-clinica")}
+                >
+                  Ver ficha clínica
+                </Button>
               </Card>
             </div>
           </div>
@@ -668,39 +821,18 @@ function PatientProfilePage() {
         )}
 
         {activeTab === "fotos-clinicas" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-display font-bold text-lg flex items-center gap-2">
-                  <ImageIcon className="h-5 w-5 text-gold" />
-                  Fotos clínicas
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Registre fotos dos atendimentos e procedimentos do paciente organizadas por data.
-                </p>
-              </div>
-              <Button variant="gold">
-                <Plus className="h-4 w-4 mr-2" /> Novo registro de fotos
-              </Button>
-            </div>
-
-            <Card className="p-6 bg-secondary/10 border-dashed">
-              <div className="text-center py-12">
-                <ImageIcon className="h-12 w-12 text-gold opacity-50 mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">Estrutura de fotos clínicas em preparação</h3>
-                <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  A integração com armazenamento será configurada na próxima etapa. Estrutura de fotos clínicas ainda precisa ser criada no Supabase.
-                </p>
-              </div>
-            </Card>
-          </div>
+          <ClinicalPhotosTab patientId={patient.id} />
         )}
 
         {activeTab === "ficha-clinica" && (
           <ClinicalRecordTab patientId={patient.id} />
         )}
 
-        {activeTab !== "resumo" && activeTab !== "dados-pessoais" && activeTab !== "anamnese" && activeTab !== "odontograma" && activeTab !== "plano-tratamento" && activeTab !== "financeiro" && activeTab !== "fotos-clinicas" && activeTab !== "ficha-clinica" && (
+        {activeTab === "documentos" && (
+          <DocumentsTab patientId={patient.id} />
+        )}
+
+        {activeTab !== "resumo" && activeTab !== "dados-pessoais" && activeTab !== "anamnese" && activeTab !== "odontograma" && activeTab !== "plano-tratamento" && activeTab !== "financeiro" && activeTab !== "fotos-clinicas" && activeTab !== "ficha-clinica" && activeTab !== "documentos" && (
           <div className="py-24 text-center">
             <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-secondary text-muted-foreground mb-4">
               <Activity className="h-8 w-8 opacity-50" />

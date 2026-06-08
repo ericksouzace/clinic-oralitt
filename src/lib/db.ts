@@ -3,7 +3,8 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type {
   Supply, FixedCost, Procedure, Settings, HistoryItem, Patient, PatientStatus, 
-  Anamnesis, AnamnesisStatus, OdontogramEntry, Appointment
+  Anamnesis, AnamnesisStatus, OdontogramEntry, Appointment,
+  PatientFile, PatientFileType
 } from "@/lib/store";
 import { DEFAULT_SETTINGS } from "@/lib/store";
 
@@ -1454,11 +1455,14 @@ export async function deleteTreatmentPlanItem(id: string) {
 
 // --- Clinical Records / Evolução Clínica ---
 
-export function useClinicalRecords(patientId?: string): [ClinicalRecord[], string | null, boolean, boolean] {
+export function useClinicalRecords(patientId?: string): [ClinicalRecord[], string | null, boolean, boolean, () => void] {
   const [records, setRecords] = useState<ClinicalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tablesMissing, setTablesMissing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refetch = () => setRefreshTrigger(prev => prev + 1);
 
   useEffect(() => {
     let active = true;
@@ -1548,9 +1552,9 @@ export function useClinicalRecords(patientId?: string): [ClinicalRecord[], strin
     }
     fetchRecords();
     return () => { active = false; };
-  }, [patientId]);
+  }, [patientId, refreshTrigger]);
 
-  return [records, error, loading, tablesMissing];
+  return [records, error, loading, tablesMissing, refetch];
 }
 
 export async function saveClinicalRecord(record: ClinicalRecord, items: ClinicalRecordSupply[]) {
@@ -2281,8 +2285,656 @@ export async function deleteAppointment(id: string) {
   if (!userData.user) return;
 
   const { error } = await supabase.from("appointments")
-    .delete()
     .eq("id", id)
     .eq("user_id", userData.user.id);
   if (error) { logSupabaseError("delete appointments", error); throw error; }
+}
+
+// ---------------------------------------------------------------------------
+// Patient Files (Storage & Metadata)
+// ---------------------------------------------------------------------------
+
+export function usePatientFiles(patientId: string, fileType: PatientFileType): [PatientFile[], boolean, string | null, () => void] {
+  const [files, setFiles] = useState<PatientFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refetch = () => setRefreshTrigger(prev => prev + 1);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchFiles() {
+      if (!patientId) {
+        if (active) { setFiles([]); setLoading(false); }
+        return;
+      }
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) {
+          if (active) { setFiles([]); setLoading(false); setError("Não autenticado"); }
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("patient_files")
+          .select("*")
+          .eq("user_id", userData.user.id)
+          .eq("patient_id", patientId)
+          .eq("file_type", fileType)
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (active && data) {
+          // Map to domain model and generate signed URLs for viewing
+          const formattedFiles = await Promise.all(data.map(async (d: any) => {
+            const file: PatientFile = {
+              id: d.id,
+              userId: d.user_id,
+              patientId: d.patient_id,
+              fileName: d.file_name,
+              filePath: d.file_path,
+              fileSize: d.file_size,
+              contentType: d.content_type,
+              fileType: d.file_type as PatientFileType,
+              category: d.category,
+              status: d.status,
+              notes: d.notes,
+              ocrStatus: d.ocr_status,
+              extractedText: d.extracted_text,
+              ocrDestinationSuggestion: d.ocr_destination_suggestion,
+              isOcrProcessed: d.is_ocr_processed,
+              reviewedAt: d.reviewed_at,
+              createdAt: d.created_at,
+              updatedAt: d.updated_at
+            };
+
+            // Generate signed URL (valid for 1 hour)
+            const { data: urlData } = await supabase.storage.from("patient-files").createSignedUrl(file.filePath, 3600);
+            if (urlData) {
+              file.url = urlData.signedUrl;
+            }
+
+            return file;
+          }));
+
+          setFiles(formattedFiles);
+          setLoading(false);
+        }
+      } catch (err: any) {
+        logSupabaseError("usePatientFiles", err);
+        if (active) {
+          setError(err.message || "Erro ao carregar arquivos");
+          setLoading(false);
+        }
+      }
+    }
+    fetchFiles();
+    return () => { active = false; };
+  }, [patientId, fileType, refreshTrigger]);
+
+  return [files, loading, error, refetch];
+}
+
+export async function uploadPatientFile(
+  patientId: string | null, 
+  file: File, 
+  fileType: PatientFileType, 
+  category: string, 
+  notes?: string,
+  ocrStatus: string = 'pendente'
+): Promise<PatientFile> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+
+  // Define limits (10MB for photos, 15MB for documents)
+  const maxSize = fileType === 'foto_clinica' ? 10 * 1024 * 1024 : 15 * 1024 * 1024;
+  if (file.size > maxSize) {
+    throw new Error(`Arquivo muito grande. Limite permitido: ${fileType === 'foto_clinica' ? '10MB para fotos' : '15MB para documentos'}.`);
+  }
+
+  // Sanitize filename to avoid weird characters
+  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
+  const uniqueId = crypto.randomUUID();
+  const folder = patientId ? patientId : 'inbox';
+  const filePath = `${userData.user.id}/${folder}/${uniqueId}-${safeName}`;
+
+  // 1. Upload to Supabase Storage
+  const { error: uploadError } = await supabase.storage
+    .from("patient-files")
+    .upload(filePath, file, {
+      cacheControl: "3600",
+      upsert: false
+    });
+
+  if (uploadError) {
+    logSupabaseError("upload file storage", uploadError);
+    throw new Error("Erro ao fazer upload do arquivo. " + uploadError.message);
+  }
+
+  // 2. Insert metadata into patient_files table
+  const dbObj = {
+    user_id: userData.user.id,
+    patient_id: patientId,
+    file_name: file.name,
+    file_path: filePath,
+    file_size: file.size,
+    content_type: file.type,
+    file_type: fileType,
+    category: category,
+    notes: notes || null,
+    ocr_status: ocrStatus,
+    ocr_destination_suggestion: suggestFileDestination(file.name, category)
+  };
+
+  const { data, error: insertError } = await supabase
+    .from("patient_files")
+    .insert(dbObj)
+    .select()
+    .single();
+
+  if (insertError) {
+    // If DB insert fails, try to cleanup the storage file
+    await supabase.storage.from("patient-files").remove([filePath]);
+    logSupabaseError("insert patient_files", insertError);
+    throw new Error("Erro ao salvar informações do arquivo no banco de dados. " + insertError.message);
+  }
+
+  const d = data as any;
+  const newFile: PatientFile = {
+    id: d.id,
+    userId: d.user_id,
+    patientId: d.patient_id,
+    fileName: d.file_name,
+    filePath: d.file_path,
+    fileSize: d.file_size,
+    contentType: d.content_type,
+    fileType: d.file_type as PatientFileType,
+    category: d.category,
+    status: d.status,
+    notes: d.notes,
+    createdAt: d.created_at,
+    updatedAt: d.updated_at
+  };
+
+  // Attach a temporary signed URL so UI can show immediately
+  const { data: urlData } = await supabase.storage.from("patient-files").createSignedUrl(newFile.filePath, 3600);
+  if (urlData) {
+    newFile.url = urlData.signedUrl;
+  }
+
+  return newFile;
+}
+
+export async function deletePatientFile(fileId: string, filePath: string) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+
+  // 1. Delete from database
+  const { error: dbError } = await supabase
+    .from("patient_files")
+    .delete()
+    .eq("id", fileId)
+    .eq("user_id", userData.user.id);
+  
+  if (dbError) {
+    logSupabaseError("delete patient_files", dbError);
+    throw new Error("Erro ao remover registro do banco de dados.");
+  }
+
+  // 2. Delete from storage
+  const { error: storageError } = await supabase.storage
+    .from("patient-files")
+    .remove([filePath]);
+  
+  if (storageError) {
+    logSupabaseError("delete file storage", storageError);
+    // Note: If storage fails but DB succeeds, we have an orphaned file, which is better than broken UI.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Central IA / OCR Inbox
+// ---------------------------------------------------------------------------
+
+export function suggestFileDestination(fileName: string, category: string): string {
+  const combined = `${fileName} ${category}`.toLowerCase();
+  
+  if (combined.includes('nota') || combined.includes('nf') || combined.includes('compra') || combined.includes('fornecedor')) {
+    return 'estoque';
+  }
+  if (combined.includes('comprovante') || combined.includes('pix') || combined.includes('recibo') || combined.includes('pagamento')) {
+    return 'financeiro';
+  }
+  if (combined.includes('radiografia') || combined.includes('raio x') || combined.includes('exame') || combined.includes('laudo')) {
+    return 'ficha_paciente';
+  }
+  if (combined.includes('contrato') || combined.includes('termo') || combined.includes('receita') || combined.includes('atestado') || combined.includes('orçamento')) {
+    return 'documento_paciente';
+  }
+  
+  return 'caixa_entrada';
+}
+
+export function useOcrInbox(): [PatientFile[], boolean, string | null, () => void] {
+  const [files, setFiles] = useState<PatientFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const refetch = () => setRefreshTrigger(prev => prev + 1);
+
+  useEffect(() => {
+    let active = true;
+    async function fetchInbox() {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        if (!userData.user) {
+          if (active) { setFiles([]); setLoading(false); setError("Não autenticado"); }
+          return;
+        }
+
+        // Fetch all files for client-side filtering by tabs
+        const { data, error } = await supabase
+          .from("patient_files")
+          .select("*, patients(full_name)")
+          .eq("user_id", userData.user.id)
+          .in("ocr_status", [
+            "pendente",
+            "processando",
+            "precisa_revisao",
+            "processado",
+            "processado_vazio",
+            "revisado",
+            "erro",
+            "aplicado",
+            "arquivado"
+          ])
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (active && data) {
+          const formattedFiles = await Promise.all(data.map(async (d: any) => {
+            const file: PatientFile = {
+              id: d.id,
+              userId: d.user_id,
+              patientId: d.patient_id,
+              fileName: d.file_name,
+              filePath: d.file_path,
+              fileSize: d.file_size,
+              contentType: d.content_type,
+              fileType: d.file_type as PatientFileType,
+              category: d.category,
+              status: d.status,
+              notes: d.notes,
+              ocrStatus: d.ocr_status,
+              extractedText: d.extracted_text,
+              ocrDestinationSuggestion: d.ocr_destination_suggestion,
+              isOcrProcessed: d.is_ocr_processed,
+              reviewedAt: d.reviewed_at,
+              createdAt: d.created_at,
+              updatedAt: d.updated_at
+            };
+
+            // Attach patient name virtually if exists
+            if (d.patients) {
+              (file as any).patientName = d.patients.full_name;
+            }
+
+            const { data: urlData } = await supabase.storage.from("patient-files").createSignedUrl(file.filePath, 3600);
+            if (urlData) {
+              file.url = urlData.signedUrl;
+            }
+
+            return file;
+          }));
+
+          setFiles(formattedFiles);
+          setLoading(false);
+        }
+      } catch (err: any) {
+        logSupabaseError("useOcrInbox", err);
+        if (active) {
+          setError(err.message || "Erro ao carregar caixa de entrada inteligente");
+          setLoading(false);
+        }
+      }
+    }
+    fetchInbox();
+    return () => { active = false; };
+  }, [refreshTrigger]);
+
+  return [files, loading, error, refetch];
+}
+
+export async function applyFileDestination(
+  fileId: string, 
+  data: { 
+    ocr_destination_suggestion: string; 
+    category: string; 
+    notes?: string; 
+    patient_id?: string | null; 
+    file_type?: string;
+  }
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+
+  const dbObj: any = {
+    ocr_destination_suggestion: data.ocr_destination_suggestion,
+    category: data.category,
+    notes: data.notes || null,
+    patient_id: data.patient_id || null,
+    ocr_status: data.ocr_destination_suggestion === "caixa_entrada" ? "precisa_revisao" : "aplicado",
+    reviewed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  if (data.file_type) {
+    dbObj.file_type = data.file_type;
+  }
+
+  const { data: updated, error } = await supabase
+    .from("patient_files")
+    .update(dbObj)
+    .eq("id", fileId)
+    .eq("user_id", userData.user.id)
+    .select().single();
+
+  if (error) {
+    logSupabaseError("applyFileDestination", error);
+    throw new Error(`Erro ao aplicar destino do arquivo: ${error.message}`);
+  }
+  if (!updated) {
+    throw new Error("Não foi possível confirmar a aplicação no módulo de destino (falha de atualização).");
+  }
+}
+
+export async function updatePatientFileOcr(
+  fileId: string, 
+  text: string, 
+  status: string, 
+  suggestion: string, 
+  isProcessed: boolean
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Not authenticated");
+
+  const { error } = await supabase
+    .from("patient_files")
+    .update({
+      extracted_text: text,
+      ocr_status: status,
+      ocr_destination_suggestion: suggestion,
+      is_ocr_processed: isProcessed
+    })
+    .eq("id", fileId)
+    .eq("user_id", userData.user.id);
+
+  if (error) {
+    logSupabaseError("updatePatientFileOcr", error);
+    throw error;
+  }
+}
+
+export async function applyFileToEstoque(
+  fileId: string, 
+  data: {
+    vendor?: string;
+    cnpj?: string;
+    date: string;
+    invoiceNumber?: string;
+    paymentMethod?: string;
+    notes?: string;
+  },
+  items: any[], 
+  category: string
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+  
+  if (!items || items.length === 0) {
+    throw new Error("Não há itens válidos para salvar no Estoque.");
+  }
+  
+  let addedCount = 0;
+
+  for (const item of items) {
+    if (item.action === 'ignore') continue;
+    
+    let supplyId = item.id;
+    
+    if (item.action === 'create' || !supplyId) {
+      const { data: newSupply, error } = await supabase.from('supplies').insert({
+        user_id: userData.user.id,
+        name: item.name,
+        category: item.category || 'Geral',
+        package_cost: item.totalPrice || 0,
+        yield_quantity: item.quantity || 1,
+        stock_quantity: item.quantity || 1,
+        unit: item.unit || 'un', // Required field fallback
+        minimum_stock: 0,
+        notes: `Criado via Central de PDFs e Arquivos. Fornecedor: ${data.vendor || ""}. NF: ${data.invoiceNumber || ""}. Arquivo: ${fileId}`
+      }).select().single();
+      
+      if (error) throw new Error(`Erro ao criar insumo ${item.name}: ${error.message}`);
+      if (!newSupply) throw new Error(`Não foi possível confirmar a criação do insumo ${item.name}.`);
+      
+      supplyId = newSupply.id;
+      
+      const { error: movErr } = await supabase.from('stock_movements').insert({
+        user_id: userData.user.id,
+        supply_id: supplyId,
+        movement_type: 'entrada',
+        quantity: item.quantity || 1,
+        reason: `Entrada via Central de PDFs e Arquivos. Compra em: ${data.date}. Fornecedor: ${data.vendor || ""}.`
+      });
+      if (movErr) throw new Error(`Erro ao registrar movimentação para ${item.name}: ${movErr.message}`);
+      
+      // Post-save validation
+      const { data: confirmSupply, error: confirmErr } = await supabase
+        .from('supplies')
+        .select('id')
+        .eq('id', supplyId)
+        .single();
+      if (confirmErr || !confirmSupply) {
+        throw new Error("Não foi possível confirmar o envio para o Estoque.");
+      }
+      
+      addedCount++;
+    } else if (item.action === 'update' && supplyId) {
+      const { data: sData, error: findErr } = await supabase.from("supplies").select("stock_quantity").eq("id", supplyId).single();
+      if (findErr || !sData) throw new Error(`Insumo não encontrado para atualização (ID: ${supplyId}).`);
+      
+      const currentStock = Number(sData.stock_quantity || 0);
+      const newStock = currentStock + (item.quantity || 0);
+      
+      const { error: updErr } = await supabase.from('supplies').update({
+        stock_quantity: newStock
+      }).eq('id', supplyId);
+      if (updErr) throw new Error(`Erro ao atualizar quantidade do insumo ${item.name}.`);
+      
+      const { error: movErr } = await supabase.from('stock_movements').insert({
+        user_id: userData.user.id,
+        supply_id: supplyId,
+        movement_type: 'entrada',
+        quantity: item.quantity || 0,
+        reason: `Atualização via Central de PDFs e Arquivos. Compra em: ${data.date}. Fornecedor: ${data.vendor || ""}.`
+      });
+      if (movErr) throw new Error(`Erro ao registrar movimentação para ${item.name}.`);
+      
+      // Post-save validation
+      const { data: confirmSupply, error: confirmErr } = await supabase
+        .from('supplies')
+        .select('id')
+        .eq('id', supplyId)
+        .single();
+      if (confirmErr || !confirmSupply) {
+        throw new Error("Não foi possível confirmar o envio para o Estoque.");
+      }
+      
+      addedCount++;
+    }
+  }
+
+  if (addedCount === 0) {
+    throw new Error("Nenhum item foi selecionado para adicionar ou atualizar no Estoque.");
+  }
+
+  await applyFileDestination(fileId, { ocr_destination_suggestion: 'estoque', category, notes: data.notes });
+}
+
+export async function applyFileToFinanceiro(
+  fileId: string, 
+  data: any, 
+  patientId: string,
+  category: string,
+  notes: string
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+
+  const { data: inserted, error } = await supabase.from('payments').insert({
+    user_id: userData.user.id,
+    patient_id: patientId || null,
+    amount: data.type === 'despesa' ? -Math.abs(data.amount || 0) : Math.abs(data.amount || 0),
+    net_amount: data.type === 'despesa' ? -Math.abs(data.netAmount || data.amount || 0) : Math.abs(data.netAmount || data.amount || 0),
+    payment_method: data.paymentMethod || 'Outro',
+    payment_date: data.date || new Date().toISOString().split('T')[0],
+    card_fee: data.fee || 0,
+    notes: `${notes}\nGerado via Central de PDFs e Arquivos. Arquivo: ${fileId}`.trim()
+  }).select().single();
+  
+  if (error) throw new Error(`Erro ao criar lançamento financeiro: ${error.message}`);
+  if (!inserted) throw new Error("Não foi possível confirmar a aplicação no Financeiro.");
+
+  // Post-save validation
+  const { data: confirmPay, error: confirmErr } = await supabase
+    .from('payments')
+    .select('id')
+    .eq('id', inserted.id)
+    .single();
+  if (confirmErr || !confirmPay) {
+    throw new Error("Não foi possível confirmar o envio para o Financeiro.");
+  }
+
+  await applyFileDestination(fileId, { ocr_destination_suggestion: 'financeiro', category, notes, patient_id: patientId });
+}
+
+export async function applyFileToClinicalRecord(
+  fileId: string, 
+  data: any, 
+  patientId: string,
+  category: string,
+  notes: string
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+  if (!patientId) throw new Error("Selecione um paciente obrigatório para a Ficha Clínica.");
+
+  const { data: inserted, error } = await supabase.from('clinical_records').insert({
+    user_id: userData.user.id,
+    patient_id: patientId,
+    record_date: data.date || new Date().toISOString().split('T')[0],
+    description: `[Central de PDFs - ${category}] [${data.clinicalType.toUpperCase()}] ${data.title}\n${data.summary || ''}`,
+    notes: `${notes}\nArquivo original: ${fileId}`.trim(),
+    charged_amount: 0,
+    real_cost: 0,
+    estimated_profit: 0
+  }).select().single();
+  
+  if (error) throw new Error(`Erro ao criar registro clínico: ${error.message}`);
+  if (!inserted) throw new Error("Não foi possível confirmar a criação do registro clínico.");
+
+  // Post-save validation
+  const { data: confirmRecord, error: confirmErr } = await supabase
+    .from('clinical_records')
+    .select('id')
+    .eq('id', inserted.id)
+    .single();
+  if (confirmErr || !confirmRecord) {
+    throw new Error("Não foi possível confirmar o vínculo com a Ficha Clínica.");
+  }
+
+  await applyFileDestination(fileId, { ocr_destination_suggestion: 'ficha_paciente', category, notes, patient_id: patientId });
+}
+
+export async function applyFileToDocumento(
+  fileId: string,
+  patientId: string,
+  category: string,
+  notes: string
+) {
+  if (!patientId) throw new Error("Selecione um paciente obrigatório para vincular o Documento.");
+  
+  await applyFileDestination(fileId, {
+    ocr_destination_suggestion: 'documento_paciente',
+    category,
+    notes,
+    patient_id: patientId,
+    file_type: 'documento'
+  });
+
+  // Post-save validation
+  const { data: confirmDoc, error: confirmErr } = await supabase
+    .from('patient_files')
+    .select('id, patient_id')
+    .eq('id', fileId)
+    .single();
+  if (confirmErr || !confirmDoc || confirmDoc.patient_id !== patientId) {
+    throw new Error("Não foi possível confirmar o envio para Documentos do Paciente.");
+  }
+}
+
+export async function applyFileToBudget(
+  fileId: string, 
+  data: any, 
+  patientId: string,
+  category: string,
+  notes: string
+) {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Não autenticado");
+  if (!patientId) throw new Error("Selecione um paciente obrigatório para gerar o Orçamento.");
+
+  const { data: budget, error } = await supabase.from('budgets').insert({
+    user_id: userData.user.id,
+    patient_id: patientId,
+    title: data.title || `Orçamento via Central de PDFs`,
+    total_amount: data.totalAmount || 0,
+    discount: 0,
+    final_amount: data.totalAmount || 0,
+    status: data.status || 'rascunho',
+    notes: `${notes}\nArquivo original: ${fileId}`.trim()
+  }).select().single();
+  
+  if (error) throw new Error(`Erro ao criar orçamento: ${error.message}`);
+  if (!budget) throw new Error("Não foi possível confirmar a criação do orçamento.");
+
+  if (data.procedures && data.procedures.length > 0) {
+    const items = data.procedures.map((p: any) => ({
+      user_id: userData.user.id,
+      budget_id: budget.id,
+      description: p.description || 'Procedimento sem nome',
+      quantity: 1,
+      unit_price: p.price || 0,
+      total_price: p.price || 0
+    }));
+    const { error: itemsErr } = await supabase.from('budget_items').insert(items);
+    if (itemsErr) throw new Error(`Erro ao salvar procedimentos do orçamento: ${itemsErr.message}`);
+  }
+
+  // Post-save validation
+  const { data: confirmBudget, error: confirmErr } = await supabase
+    .from('budgets')
+    .select('id')
+    .eq('id', budget.id)
+    .single();
+  if (confirmErr || !confirmBudget) {
+    throw new Error("Não foi possível confirmar a criação do Orçamento.");
+  }
+
+  await applyFileDestination(fileId, { ocr_destination_suggestion: 'orcamento', category, notes, patient_id: patientId });
 }

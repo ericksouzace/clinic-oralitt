@@ -132,15 +132,13 @@ export function TreatmentPlanTab({ patientId }: Props) {
   };
 
   const handleDeletePlan = async (id: string) => {
-    if (confirm("Tem certeza que deseja apagar este plano inteiro? Todos os itens dele serão removidos.")) {
-      try {
-        await deleteTreatmentPlan(id);
-        toast.success("Plano apagado com sucesso.");
-        if (selectedPlanId === id) handleSelectPlanId(null);
-        window.location.reload();
-      } catch (err: any) {
-        toast.error("Erro ao apagar: " + err.message);
-      }
+    try {
+      await deleteTreatmentPlan(id);
+      toast.success("Plano apagado com sucesso.");
+      if (selectedPlanId === id) handleSelectPlanId(null);
+      window.location.reload();
+    } catch (err: any) {
+      toast.error("Não foi possível excluir agora.");
     }
   };
 
@@ -178,14 +176,12 @@ export function TreatmentPlanTab({ patientId }: Props) {
   };
 
   const handleDeleteItem = async (id: string) => {
-    if (confirm("Apagar este procedimento do plano?")) {
-      try {
-        await deleteTreatmentPlanItem(id);
-        toast.success("Item apagado.");
-        window.location.reload();
-      } catch (err: any) {
-        toast.error("Erro ao apagar: " + err.message);
-      }
+    try {
+      await deleteTreatmentPlanItem(id);
+      toast.success("Item apagado.");
+      window.location.reload();
+    } catch (err: any) {
+      toast.error("Não foi possível excluir agora.");
     }
   };
 

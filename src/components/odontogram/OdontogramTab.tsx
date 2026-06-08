@@ -8,6 +8,7 @@ import { Label, Textarea, Button } from "@/components/ui-bits";
 import { Trash2 } from "lucide-react";
 import { STATUS_COLORS } from "@/lib/store";
 import { useOdontogramCustomTypes } from "./useOdontogramCustomTypes";
+import { toast } from "sonner";
 
 interface Props {
   patientId: string;
@@ -89,9 +90,12 @@ function OdontogramContent({ patientId }: Props) {
 
   const handleDeleteEntry = async () => {
     if (!existingEntryId) return;
-    if (confirm("Tem certeza que deseja apagar esta marcação?")) {
+    try {
       await setEntries(prev => (prev || []).filter(o => o.id !== existingEntryId));
       setIsNotesModalOpen(false);
+      toast.success("Marcação removida.");
+    } catch (err) {
+      toast.error("Não foi possível excluir agora.");
     }
   };
 
@@ -180,8 +184,11 @@ function OdontogramContent({ patientId }: Props) {
                     size="sm" 
                     className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
                     onClick={async () => {
-                      if (confirm("Tem certeza que deseja apagar esta marcação?")) {
+                      try {
                         await setEntries(prev => (prev || []).filter(o => o.id !== entry.id));
+                        toast.success("Marcação removida.");
+                      } catch (err) {
+                        toast.error("Não foi possível excluir agora.");
                       }
                     }}
                   >

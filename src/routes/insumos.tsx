@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import AppLayout from "@/components/AppLayout";
 import {
   PageHeader, Card, Button, Input, Select, Label, Badge, EmptyState,
@@ -32,6 +33,48 @@ function InsumosPage() {
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState<Omit<Supply, "id">>(emptySupply());
 
+  const [movements, setMovements] = useState<any[]>([]);
+  const [patients, setPatients] = useState<any[]>([]);
+  const [loadingMovements, setLoadingMovements] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function loadMovements() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch patients
+        const { data: patientsData } = await supabase
+          .from("patients")
+          .select("id, full_name")
+          .eq("user_id", user.id);
+        if (active && patientsData) {
+          setPatients(patientsData);
+        }
+
+        // Fetch movements
+        const { data: movementsData, error } = await supabase
+          .from("stock_movements")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        if (error) throw error;
+        if (active && movementsData) {
+          setMovements(movementsData);
+        }
+      } catch (e) {
+        console.error("Erro ao carregar movimentações:", e);
+      } finally {
+        if (active) setLoadingMovements(false);
+      }
+    }
+    loadMovements();
+    return () => { active = false; };
+  }, [supplies]);
+
   const allCats = useMemo(() => [...SUPPLY_CATEGORIES, ...customCats.filter(c => !SUPPLY_CATEGORIES.includes(c))], [customCats]);
   const filtered = supplies.filter(s =>
     (cat === "todas" || s.category === cat) &&
@@ -56,9 +99,12 @@ function InsumosPage() {
     close();
   }
   function remove(id: string) {
-    if (!confirm("Excluir este insumo?")) return;
-    setSupplies(supplies.filter(s => s.id !== id));
-    toast.success("Insumo removido.");
+    try {
+      setSupplies(supplies.filter(s => s.id !== id));
+      toast.success("Insumo removido.");
+    } catch (err) {
+      toast.error("Não foi possível excluir agora.");
+    }
   }
   function addCustomCat() {
     const name = prompt("Nome da nova categoria:");
@@ -176,6 +222,110 @@ function InsumosPage() {
           </div>
         </Card>
       )}
+
+      <Card className="mt-8">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-display font-bold text-lg">Histórico de movimentações</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              setLoadingMovements(true);
+              try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                  const { data } = await supabase
+                    .from("stock_movements")
+                    .select("*")
+                    .eq("user_id", user.id)
+                    .order("created_at", { ascending: false })
+                    .limit(50);
+                  if (data) setMovements(data);
+                }
+              } catch (e) {
+                console.error(e);
+              } finally {
+                setLoadingMovements(false);
+              }
+            }}
+            disabled={loadingMovements}
+            className="h-8 text-xs font-semibold"
+          >
+            Atualizar histórico
+          </Button>
+        </div>
+
+        {loadingMovements ? (
+          <div className="text-center py-6 text-sm text-muted-foreground animate-pulse">
+            Carregando histórico de movimentações...
+          </div>
+        ) : movements.length === 0 ? (
+          <div className="text-center py-8 text-sm text-muted-foreground">
+            Nenhuma movimentação de estoque registrada ainda.
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-5">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                  <th className="py-2 px-5 font-medium">Data</th>
+                  <th className="py-2 px-2 font-medium">Insumo</th>
+                  <th className="py-2 px-2 font-medium">Tipo</th>
+                  <th className="py-2 px-2 font-medium text-right">Qtd</th>
+                  <th className="py-2 px-2 font-medium">Motivo</th>
+                  <th className="py-2 px-5 font-medium">Paciente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {movements.map((m) => {
+                  const supplyName = supplies.find(s => s.id === m.supply_id)?.name || "Insumo desconhecido";
+                  const patientName = patients.find(p => p.id === m.patient_id)?.full_name || (m.patient_id ? "Paciente vinculado" : "—");
+                  
+                  let badgeTone: "ok" | "danger" | "warn" | "neutral" | "gold" = "neutral";
+                  let typeLabel = m.movement_type;
+                  let customBadgeClass = "";
+                  
+                  if (m.movement_type === "entrada") {
+                    badgeTone = "ok";
+                    typeLabel = "Entrada";
+                  } else if (m.movement_type === "saida" || m.movement_type === "saída") {
+                    badgeTone = "danger";
+                    typeLabel = "Saída";
+                  } else if (m.movement_type === "ajuste") {
+                    badgeTone = "gold";
+                    typeLabel = "Ajuste";
+                  } else if (m.movement_type === "estorno" || m.reason?.toLowerCase().includes("estorno")) {
+                    badgeTone = "neutral";
+                    typeLabel = "Estorno";
+                    customBadgeClass = "bg-blue-50 text-blue-700 border-blue-200";
+                  }
+
+                  return (
+                    <tr key={m.id} className="border-b border-border/60 hover:bg-secondary/40">
+                      <td className="py-2.5 px-5 text-xs text-muted-foreground">
+                        {new Date(m.created_at).toLocaleString("pt-BR", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })}
+                      </td>
+                      <td className="py-2 px-2 font-medium">{supplyName}</td>
+                      <td className="py-2 px-2">
+                        <Badge tone={badgeTone} className={customBadgeClass}>{typeLabel}</Badge>
+                      </td>
+                      <td className="py-2 px-2 text-right font-bold tabular-nums pr-4">{m.quantity}</td>
+                      <td className="py-2 px-2 text-xs text-muted-foreground max-w-[200px] truncate" title={m.reason}>{m.reason || "—"}</td>
+                      <td className="py-2 px-5 text-xs font-medium">{patientName}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
 
       {creating && (
         <div className="fixed inset-0 z-50 bg-foreground/30 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={close}>

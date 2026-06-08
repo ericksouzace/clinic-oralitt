@@ -21,8 +21,12 @@ function HistoryPage() {
   );
 
   function remove(id: string) {
-    if (!confirm("Excluir registro?")) return;
-    setHistory(history.filter(h => h.id !== id));
+    try {
+      setHistory(history.filter(h => h.id !== id));
+      toast.success("Registro excluído.");
+    } catch (err) {
+      toast.error("Não foi possível excluir agora.");
+    }
   }
   function duplicate(id: string) {
     const h = history.find(x => x.id === id);

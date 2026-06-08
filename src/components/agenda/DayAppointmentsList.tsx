@@ -15,6 +15,7 @@ interface DayAppointmentsListProps {
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   onWhatsApp: (app: Appointment) => void;
   onViewPatient: (patientId: string) => void;
+  onCreateEvolution?: (app: Appointment) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -67,12 +68,14 @@ function AppointmentCard({
   onStatusChange,
   onWhatsApp,
   onViewPatient,
+  onCreateEvolution,
 }: {
   app: Appointment;
   onEdit: (app: Appointment) => void;
   onStatusChange: (id: string, status: AppointmentStatus) => void;
   onWhatsApp: (app: Appointment) => void;
   onViewPatient: (patientId: string) => void;
+  onCreateEvolution?: (app: Appointment) => void;
 }) {
   const status = statusConfig(app.status);
   const isConcluded = app.status === "concluído";
@@ -166,7 +169,7 @@ function AppointmentCard({
               <button
                 type="button"
                 onClick={() => onStatusChange(app.id, "confirmado")}
-                className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold text-white bg-emerald-600 border border-emerald-600 hover:bg-emerald-700 transition-colors"
+                className="agenda-btn-secondary inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition-colors"
               >
                 <CheckCircle className="w-3.5 h-3.5" /> Confirmar
               </button>
@@ -176,7 +179,7 @@ function AppointmentCard({
               <button
                 type="button"
                 onClick={() => onStatusChange(app.id, "em atendimento")}
-                className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold text-white bg-amber-500 border border-amber-500 hover:bg-amber-600 transition-colors"
+                className="agenda-btn-primary inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition-colors"
               >
                 Atender
               </button>
@@ -204,7 +207,7 @@ function AppointmentCard({
         {isConcluded && (
           <button
             type="button"
-            onClick={() => onViewPatient(app.patientId)}
+            onClick={() => onCreateEvolution ? onCreateEvolution(app) : onViewPatient(app.patientId)}
             className="agenda-btn-secondary inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold transition-colors"
           >
             <Plus className="w-3.5 h-3.5" /> Criar evolução clínica
@@ -225,6 +228,7 @@ export function DayAppointmentsList({
   onStatusChange,
   onWhatsApp,
   onViewPatient,
+  onCreateEvolution,
 }: DayAppointmentsListProps) {
   const readableDate = formatDateReadable(selectedDate);
 
@@ -279,6 +283,7 @@ export function DayAppointmentsList({
               onStatusChange={onStatusChange}
               onWhatsApp={onWhatsApp}
               onViewPatient={onViewPatient}
+              onCreateEvolution={onCreateEvolution}
             />
           ))
         )}

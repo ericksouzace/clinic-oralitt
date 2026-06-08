@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { Search, Plus, Trash2, Edit3, Eye, Calendar, Phone, Users } from "lucide-react";
+import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 import { PageHeader, Card, Button, Input, Label, Select, Badge } from "@/components/ui-bits";
 import { usePatients } from "@/lib/db";
@@ -67,12 +68,16 @@ function PacientesPage() {
   }, [patients, search, statusFilter]);
 
   const remove = async (id: string) => {
-    if (!confirm("Excluir este paciente definitivamente?")) return;
-    await setPatients((prev) => prev.filter((x) => x.id !== id));
+    try {
+      await setPatients((prev) => prev.filter((x) => x.id !== id));
+      toast.success("Paciente excluído.");
+    } catch (err) {
+      toast.error("Não foi possível excluir agora.");
+    }
   };
 
   const save = async () => {
-    if (!draft || !draft.fullName.trim()) return alert("O nome completo é obrigatório.");
+    if (!draft || !draft.fullName.trim()) return toast.error("O nome completo é obrigatório.");
     
     if (!draft.id) {
       // New patient

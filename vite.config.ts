@@ -12,4 +12,18 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  nitro: {
+    preset: "vercel"
+  },
+  vite: {
+    server: {
+      allowedHosts: [
+        "1151b04af306f9f8-201-20-127-165.serveousercontent.com",
+        "serveousercontent.com",
+        "serveo.net",
+        "belize-guam-sim-california.trycloudflare.com",
+        "trycloudflare.com"
+      ]
+    }
+  }
 });

@@ -143,8 +143,12 @@ function ProceduresPage() {
   }
 
   function remove(id: string) {
-    if (!confirm("Excluir procedimento?")) return;
-    setItems(items.filter(p => p.id !== id));
+    try {
+      setItems(items.filter(p => p.id !== id));
+      toast.success("Procedimento excluído.");
+    } catch (err) {
+      toast.error("Não foi possível excluir agora.");
+    }
   }
 
   function addCat() {

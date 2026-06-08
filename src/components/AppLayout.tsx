@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Package, Wallet, Stethoscope, Calculator,
-  History, Settings, BarChart3, Sparkles, LogOut, Users, Calendar
+  History, Settings, BarChart3, Sparkles, LogOut, Users, Calendar, MessageCircle, BrainCircuit
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "@/components/AuthProvider";
@@ -10,11 +10,13 @@ const NAV = [
   { to: "/", label: "Painel", icon: LayoutDashboard, exact: true },
   { to: "/agenda", label: "Agenda", icon: Calendar },
   { to: "/pacientes", label: "Pacientes", icon: Users },
+  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { to: "/insumos", label: "Insumos", icon: Package },
   { to: "/custos-fixos", label: "Custos fixos", icon: Wallet },
   { to: "/procedimentos", label: "Procedimentos", icon: Stethoscope },
   { to: "/precificar", label: "Precificar", icon: Calculator, highlight: true },
   { to: "/historico", label: "Histórico", icon: History },
+  { to: "/central-ia", label: "PDFs e Arquivos", icon: BrainCircuit },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
@@ -156,7 +158,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       {/* Mobile bottom nav */}
       <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-card/95 backdrop-blur">
         <div className="grid grid-cols-5 gap-1 px-2 py-2">
-          {[NAV[0], NAV[2], NAV[1], NAV[6], NAV[9]].map((n) => {
+          {[NAV[0], NAV[2], NAV[1], NAV[3], NAV[7]].map((n) => {
             const active = isActive(n.to, "exact" in n ? n.exact : false);
             const Icon = n.icon;
             const highlight = "highlight" in n && n.highlight;
