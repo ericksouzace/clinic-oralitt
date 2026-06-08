@@ -101,8 +101,8 @@ function OdontogramContent({ patientId }: Props) {
 
   return (
     <div className="flex flex-col gap-8 w-full">
-      <div className="flex flex-col lg:flex-row gap-6 w-full items-start">
-        <div className="w-full lg:w-80 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-6 w-full items-start">
+        <div className="w-full">
           <OdontogramToolbar 
             brushStatus={brushStatus}
             setBrushStatus={setBrushStatus}
@@ -111,8 +111,8 @@ function OdontogramContent({ patientId }: Props) {
           />
         </div>
         
-        <div className="flex-1 w-full flex flex-col gap-4">
-          <div className="flex justify-center">
+        <div className="w-full min-w-0 flex flex-col gap-4">
+          <div className="flex justify-center w-full min-w-0">
             <OdontogramMap 
               entries={entries || []}
               onRegionClick={handleRegionClick}

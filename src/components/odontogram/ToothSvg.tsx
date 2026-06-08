@@ -112,7 +112,7 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
       {upper && <span className="text-[10px] sm:text-xs font-bold text-muted-foreground">{toothNumber}</span>}
       <svg 
         viewBox="0 0 100 120" 
-        className="w-10 h-14 sm:w-16 sm:h-20 drop-shadow-sm transition-transform hover:scale-105 cursor-pointer overflow-visible"
+        className="w-7 h-9 sm:w-8 sm:h-11 md:w-10 md:h-13 lg:w-9 lg:h-12 xl:w-12 xl:h-16 drop-shadow-sm transition-transform hover:scale-105 cursor-pointer overflow-visible"
       >
         {/* Raízes */}
         {rootsPolys.map((poly, i) => (
