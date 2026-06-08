@@ -14,43 +14,45 @@ interface Props {
 
 export function OdontogramMap({ entries, onRegionClick }: Props) {
   return (
-    <div className="flex flex-col items-center gap-8 sm:gap-12 p-4 bg-white rounded-xl border border-border overflow-x-auto w-full">
-      {/* Arcada Superior */}
-      <div className="flex flex-col items-center">
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Arcada Superior</h3>
-        <div className="flex gap-2 sm:gap-4 items-center">
-          <div className="flex gap-1 sm:gap-2">
-            {upperRight.map(num => (
-              <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-            ))}
-          </div>
-          <div className="w-px h-24 sm:h-32 bg-border mx-1 sm:mx-2" />
-          <div className="flex gap-1 sm:gap-2">
-            {upperLeft.map(num => (
-              <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="w-full h-px bg-border/50 max-w-4xl" />
-
-      {/* Arcada Inferior */}
-      <div className="flex flex-col items-center">
-        <div className="flex gap-2 sm:gap-4 items-center">
-          <div className="flex gap-1 sm:gap-2">
-            {lowerRight.map(num => (
-              <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-            ))}
-          </div>
-          <div className="w-px h-24 sm:h-32 bg-border mx-1 sm:mx-2" />
-          <div className="flex gap-1 sm:gap-2">
-            {lowerLeft.map(num => (
-              <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-            ))}
+    <div className="w-full overflow-x-auto bg-white rounded-xl border border-border p-4">
+      <div className="min-w-max mx-auto flex flex-col items-center gap-8 sm:gap-12">
+        {/* Arcada Superior */}
+        <div className="flex flex-col items-center w-full">
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Arcada Superior</h3>
+          <div className="flex gap-2 sm:gap-4 items-center">
+            <div className="flex gap-1 sm:gap-2">
+              {upperRight.map(num => (
+                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
+              ))}
+            </div>
+            <div className="w-px h-24 sm:h-32 bg-border mx-1 sm:mx-2" />
+            <div className="flex gap-1 sm:gap-2">
+              {upperLeft.map(num => (
+                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
+              ))}
+            </div>
           </div>
         </div>
-        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-4">Arcada Inferior</h3>
+
+        <div className="w-full h-px bg-border/50 max-w-4xl" />
+
+        {/* Arcada Inferior */}
+        <div className="flex flex-col items-center w-full">
+          <div className="flex gap-2 sm:gap-4 items-center">
+            <div className="flex gap-1 sm:gap-2">
+              {lowerRight.map(num => (
+                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
+              ))}
+            </div>
+            <div className="w-px h-24 sm:h-32 bg-border mx-1 sm:mx-2" />
+            <div className="flex gap-1 sm:gap-2">
+              {lowerLeft.map(num => (
+                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
+              ))}
+            </div>
+          </div>
+          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-4">Arcada Inferior</h3>
+        </div>
       </div>
     </div>
   );
