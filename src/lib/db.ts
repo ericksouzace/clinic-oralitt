@@ -710,6 +710,7 @@ type DbPatient = {
   user_id: string;
   record_number: string | null;
   full_name: string;
+  reference_note: string | null;
   cpf: string | null;
   rg: string | null;
   issuing_agency: string | null;
@@ -730,7 +731,7 @@ function dbToPatient(r: DbPatient): Patient {
   return {
     id: r.id,
     recordNumber: r.record_number ?? "",
-    fullName: r.full_name || "Sem nome",
+    fullName: r.full_name || "Sem nome", referenceNote: r.reference_note ?? "",
     cpf: r.cpf ?? "",
     rg: r.rg ?? "",
     issuingAgency: r.issuing_agency ?? "",
@@ -751,7 +752,7 @@ function patientToDb(p: Partial<Patient>, userId: string) {
   return {
     user_id: userId,
     record_number: strOrNull(p.recordNumber),
-    full_name: p.fullName || "Sem nome",
+    full_name: p.fullName || "Sem nome", reference_note: strOrNull(p.referenceNote),
     cpf: strOrNull(p.cpf),
     rg: strOrNull(p.rg),
     issuing_agency: strOrNull(p.issuingAgency),
