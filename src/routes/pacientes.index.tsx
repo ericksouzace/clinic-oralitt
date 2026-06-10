@@ -282,16 +282,12 @@ function PacientesPage() {
                 <span>Buscar paciente</span>
               </div>
 
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-
-                <Input
-                  className="h-12 w-full rounded-2xl border-gold/30 bg-white pl-12 pr-4 text-base shadow-sm focus-visible:ring-gold/40"
-                  placeholder="Buscar por nome, referência, CPF, telefone ou prontuário..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
+              <Input
+                className="h-12 w-full rounded-2xl border-gold/30 bg-white px-4 text-base shadow-sm focus-visible:ring-gold/40"
+                placeholder="Buscar por nome, referência, CPF, telefone ou prontuário..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">

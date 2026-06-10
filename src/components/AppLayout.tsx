@@ -120,10 +120,8 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
         <div className="p-4 text-[11px] text-muted-foreground border-t border-border">
           <div className="mb-2">
             <div className="font-semibold text-foreground truncate">{profile?.full_name || "Dentista"}</div>
-            <div className="text-[10px] text-muted-foreground truncate">{profile?.email || ""}</div>
           </div>
           <span className="text-gold-gradient font-semibold">Oralit</span> · v1.0
-          <div className="mt-1">Dados salvos em nuvem (Supabase).</div>
         </div>
       </aside>
 
