@@ -16,7 +16,7 @@ const NAV = [
   { to: "/procedimentos", label: "Procedimentos", icon: Stethoscope },
   { to: "/precificar", label: "Precificar", icon: Calculator, highlight: true },
   { to: "/historico", label: "Histórico", icon: History },
-  { to: "/central-ia", label: "PDFs e Arquivos", icon: BrainCircuit },
+  { to: "/central-ia", label: "PDFs e Arquivos", icon: BrainCircuit }, { to: "/armazenamento", label: "Armazenamento", icon: HardDrive },
   { to: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { to: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
