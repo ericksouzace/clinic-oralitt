@@ -24,6 +24,7 @@ import { Route as CustosFixosRouteImport } from './routes/custos-fixos'
 import { Route as ConfiguracoesRouteImport } from './routes/configuracoes'
 import { Route as CentralIaRouteImport } from './routes/central-ia'
 import { Route as CadastroRouteImport } from './routes/cadastro'
+import { Route as ArmazenamentoRouteImport } from './routes/armazenamento'
 import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PacientesIndexRouteImport } from './routes/pacientes.index'
@@ -105,6 +106,11 @@ const CadastroRoute = CadastroRouteImport.update({
   path: '/cadastro',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ArmazenamentoRoute = ArmazenamentoRouteImport.update({
+  id: '/armazenamento',
+  path: '/armazenamento',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgendaRoute = AgendaRouteImport.update({
   id: '/agenda',
   path: '/agenda',
@@ -134,6 +140,7 @@ const ApiWhatsappWebhookRoute = ApiWhatsappWebhookRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
+  '/armazenamento': typeof ArmazenamentoRoute
   '/cadastro': typeof CadastroRoute
   '/central-ia': typeof CentralIaRoute
   '/configuracoes': typeof ConfiguracoesRoute
@@ -156,6 +163,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
+  '/armazenamento': typeof ArmazenamentoRoute
   '/cadastro': typeof CadastroRoute
   '/central-ia': typeof CentralIaRoute
   '/configuracoes': typeof ConfiguracoesRoute
@@ -179,6 +187,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/agenda': typeof AgendaRoute
+  '/armazenamento': typeof ArmazenamentoRoute
   '/cadastro': typeof CadastroRoute
   '/central-ia': typeof CentralIaRoute
   '/configuracoes': typeof ConfiguracoesRoute
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/agenda'
+    | '/armazenamento'
     | '/cadastro'
     | '/central-ia'
     | '/configuracoes'
@@ -225,6 +235,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/agenda'
+    | '/armazenamento'
     | '/cadastro'
     | '/central-ia'
     | '/configuracoes'
@@ -247,6 +258,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/agenda'
+    | '/armazenamento'
     | '/cadastro'
     | '/central-ia'
     | '/configuracoes'
@@ -270,6 +282,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AgendaRoute: typeof AgendaRoute
+  ArmazenamentoRoute: typeof ArmazenamentoRoute
   CadastroRoute: typeof CadastroRoute
   CentralIaRoute: typeof CentralIaRoute
   ConfiguracoesRoute: typeof ConfiguracoesRoute
@@ -397,6 +410,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CadastroRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/armazenamento': {
+      id: '/armazenamento'
+      path: '/armazenamento'
+      fullPath: '/armazenamento'
+      preLoaderRoute: typeof ArmazenamentoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agenda': {
       id: '/agenda'
       path: '/agenda'
@@ -438,6 +458,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgendaRoute: AgendaRoute,
+  ArmazenamentoRoute: ArmazenamentoRoute,
   CadastroRoute: CadastroRoute,
   CentralIaRoute: CentralIaRoute,
   ConfiguracoesRoute: ConfiguracoesRoute,

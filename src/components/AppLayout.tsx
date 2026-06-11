@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard, Package, Wallet, Stethoscope, Calculator,
-  History, Settings, BarChart3, Sparkles, LogOut, Users, Calendar, MessageCircle, BrainCircuit
+  History, Settings, BarChart3, Sparkles, LogOut, Users, Calendar, MessageCircle, BrainCircuit, HardDrive
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useAuth } from "@/components/AuthProvider";

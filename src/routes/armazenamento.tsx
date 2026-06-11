@@ -1,18 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import AppLayout from "@/components/AppLayout";
-import { Badge, Button, Card, PageHeader } from "@/components/ui-bits";
+import { Card, PageHeader, Button, Badge } from "@/components/ui-bits";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Cloud,
-  Database,
-  HardDrive,
-  Info,
-  RefreshCw,
-  ShieldAlert,
-} from "lucide-react";
+import { AlertTriangle, Cloud, Database, HardDrive, RefreshCw } from "lucide-react";
 
 export const Route = createFileRoute("/armazenamento")({
   head: () => ({ meta: [{ title: "Armazenamento — Oralit" }] }),
@@ -20,120 +11,108 @@ export const Route = createFileRoute("/armazenamento")({
 });
 
 type Usage = {
-  used_bytes?: number;
   used_mb: number;
   limit_mb: number;
-  percentage: number;
   remaining_mb: number;
+  percentage: number;
   files_count?: number;
 };
 
-type Tone = "ok" | "warn" | "danger";
-
-function asNumber(value: unknown, fallback = 0) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
+function toNumber(value: unknown, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
 }
 
-function normalizeUsage(input: unknown): Usage {
-  const raw = Array.isArray(input) ? input[0] : input;
+function normalizeUsage(data: unknown): Usage {
+  const raw = Array.isArray(data) ? data[0] : data;
   const obj = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  const used_mb = asNumber(obj.used_mb);
-  const limit_mb = asNumber(obj.limit_mb, 1);
-  const percentage = asNumber(obj.percentage, limit_mb > 0 ? (used_mb / limit_mb) * 100 : 0);
-  const remaining_mb = asNumber(obj.remaining_mb, Math.max(limit_mb - used_mb, 0));
+
+  const usedMb = toNumber(obj.used_mb);
+  const limitMb = toNumber(obj.limit_mb, 1);
+  const percentage = toNumber(obj.percentage, limitMb > 0 ? (usedMb / limitMb) * 100 : 0);
+  const remainingMb = toNumber(obj.remaining_mb, Math.max(limitMb - usedMb, 0));
 
   return {
-    used_bytes: asNumber(obj.used_bytes),
-    used_mb,
-    limit_mb,
+    used_mb: usedMb,
+    limit_mb: limitMb,
+    remaining_mb: remainingMb,
     percentage,
-    remaining_mb,
-    files_count: obj.files_count === undefined ? undefined : asNumber(obj.files_count),
+    files_count: obj.files_count === undefined ? undefined : toNumber(obj.files_count),
   };
 }
 
-function getTone(percentage: number): Tone {
-  if (percentage >= 90) return "danger";
-  if (percentage >= 70) return "warn";
-  return "ok";
-}
-
-function statusLabel(percentage: number) {
-  if (percentage >= 90) return "Crítico";
-  if (percentage >= 70) return "Atenção";
-  return "Seguro";
-}
-
-function progressColor(tone: Tone) {
-  if (tone === "danger") return "bg-rose-500";
-  if (tone === "warn") return "bg-amber-500";
-  return "bg-emerald-500";
-}
-
-function formatMb(mb: number) {
-  if (mb >= 1024) {
-    return `${(mb / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} GiB`;
+function formatMb(value: number) {
+  if (value >= 1024) {
+    return `${(value / 1024).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} GiB`;
   }
 
-  return `${mb.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} MB`;
+  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} MB`;
 }
 
-function UsageCard({
+function getStatus(percentage: number) {
+  if (percentage >= 90) return { label: "Crítico", tone: "danger" as const, bar: "bg-rose-500" };
+  if (percentage >= 70) return { label: "Atenção", tone: "warn" as const, bar: "bg-amber-500" };
+  return { label: "Seguro", tone: "ok" as const, bar: "bg-emerald-500" };
+}
+
+function StorageCard({
   title,
-  subtitle,
-  icon: Icon,
+  description,
+  icon,
   usage,
 }: {
   title: string;
-  subtitle: string;
-  icon: typeof Database;
+  description: string;
+  icon: "database" | "storage";
   usage: Usage | null;
 }) {
+  const Icon = icon === "database" ? Database : HardDrive;
   const percentage = usage?.percentage ?? 0;
-  const tone = getTone(percentage);
-  const clamped = Math.min(Math.max(percentage, 0), 100);
+  const status = getStatus(percentage);
+  const width = Math.min(Math.max(percentage, 0), 100);
 
   return (
-    <Card className="overflow-hidden border-gold/20 bg-card/95">
+    <Card>
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="rounded-2xl bg-gold/10 p-3 text-gold">
             <Icon className="h-5 w-5" />
           </div>
+
           <div>
-            <h2 className="text-base font800 text-foreground">{title}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+            <h2 className="text-lg font800 text-foreground">{title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
-        <Badge tone={tone}>{statusLabel(percentage)}</Badge>
+
+        <Badge tone={status.tone}>{status.label}</Badge>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-border bg-background/70 p-3">
+        <div className="rounded-xl border border-border bg-background p-3">
           <p className="text-xs text-muted-foreground">Consumido</p>
-          <p className="mt-1 text-lg font800 text-foreground">{usage ? formatMb(usage.used_mb) : "—"}</p>
+          <p className="mt-1 text-xl font800">{usage ? formatMb(usage.used_mb) : "—"}</p>
         </div>
-        <div className="rounded-2xl border border-border bg-background/70 p-3">
+
+        <div className="rounded-xl border border-border bg-background p-3">
           <p className="text-xs text-muted-foreground">Limite</p>
-          <p className="mt-1 text-lg font800 text-foreground">{usage ? formatMb(usage.limit_mb) : "—"}</p>
+          <p className="mt-1 text-xl font800">{usage ? formatMb(usage.limit_mb) : "—"}</p>
         </div>
-        <div className="rounded-2xl border border-border bg-background/70 p-3">
-          <p className="text-xs text-muted-foreground">Ainda disponível</p>
-          <p className="mt-1 text-lg font800 text-foreground">{usage ? formatMb(usage.remaining_mb) : "—"}</p>
+
+        <div className="rounded-xl border border-border bg-background p-3">
+          <p className="text-xs text-muted-foreground">Falta consumir</p>
+          <p className="mt-1 text-xl font800">{usage ? formatMb(usage.remaining_mb) : "—"}</p>
         </div>
       </div>
 
       <div className="mt-5">
-        <div className="mb-2 flex items-center justify-between text-xs font700 text-muted-foreground">
-          <span>{usage ? `${percentage.toFixed(2)}% usado` : "Aguardando leitura"}</span>
+        <div className="mb-2 flex justify-between text-xs font700 text-muted-foreground">
+          <span>{usage ? `${percentage.toFixed(2)}% usado` : "Carregando..."}</span>
           {usage?.files_count !== undefined && <span>{usage.files_count} arquivo(s)</span>}
         </div>
+
         <div className="h-3 overflow-hidden rounded-full bg-secondary">
-          <div
-            className={`h-full rounded-full transition-all ${progressColor(tone)}`}
-            style={{ width: `${clamped}%` }}
-          />
+          <div className={`h-full rounded-full ${status.bar}`} style={{ width: `${width}%` }} />
         </div>
       </div>
     </Card>
@@ -143,29 +122,30 @@ function UsageCard({
 function ArmazenamentoPage() {
   const [databaseUsage, setDatabaseUsage] = useState<Usage | null>(null);
   const [storageUsage, setStorageUsage] = useState<Usage | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   async function loadUsage() {
+    setLoading(true);
+    setErrorMessage("");
+
     try {
-      setLoading(true);
-      setError(null);
+      const databaseResult = await (supabase as any).rpc("get_database_usage");
+      const storageResult = await (supabase as any).rpc("get_storage_usage");
 
-      const [databaseResult, storageResult] = await Promise.all([
-        (supabase as any).rpc("get_database_usage"),
-        (supabase as any).rpc("get_storage_usage"),
-      ]);
+      if (databaseResult.error) {
+        throw new Error(databaseResult.error.message);
+      }
 
-      if (databaseResult.error) throw databaseResult.error;
-      if (storageResult.error) throw storageResult.error;
+      if (storageResult.error) {
+        throw new Error(storageResult.error.message);
+      }
 
       setDatabaseUsage(normalizeUsage(databaseResult.data));
       setStorageUsage(normalizeUsage(storageResult.data));
-      setUpdatedAt(new Date());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Não foi possível carregar o uso de armazenamento.";
-      setError(message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro ao carregar dados.";
+      setErrorMessage(message);
     } finally {
       setLoading(false);
     }
@@ -175,40 +155,12 @@ function ArmazenamentoPage() {
     loadUsage();
   }, []);
 
-  const alerts = useMemo(() => {
-    const list: { tone: Tone; title: string; description: string }[] = [];
-
-    if (databaseUsage) {
-      const tone = getTone(databaseUsage.percentage);
-      if (tone !== "ok") {
-        list.push({
-          tone,
-          title: tone === "danger" ? "Banco de dados em nível crítico" : "Banco de dados em atenção",
-          description: `O banco já consumiu ${databaseUsage.percentage.toFixed(2)}% do limite de ${formatMb(databaseUsage.limit_mb)}.`,
-        });
-      }
-    }
-
-    if (storageUsage) {
-      const tone = getTone(storageUsage.percentage);
-      if (tone !== "ok") {
-        list.push({
-          tone,
-          title: tone === "danger" ? "Storage em nível crítico" : "Storage em atenção",
-          description: `Os arquivos já consumiram ${storageUsage.percentage.toFixed(2)}% do limite de ${formatMb(storageUsage.limit_mb)}.`,
-        });
-      }
-    }
-
-    return list;
-  }, [databaseUsage, storageUsage]);
-
   return (
     <AppLayout>
       <div className="mx-auto max-w-7xl space-y-6">
         <PageHeader
           title="Armazenamento"
-          subtitle="Acompanhe quanto a Clínica Oralit já consumiu no banco de dados e nos arquivos, com limite, saldo restante e alertas automáticos."
+          subtitle="Acompanhe quanto a Clínica Oralit já consumiu e quanto ainda falta antes de atingir os limites."
           action={
             <Button onClick={loadUsage} disabled={loading} variant="gold">
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
@@ -217,15 +169,15 @@ function ArmazenamentoPage() {
           }
         />
 
-        {error && (
-          <Card className="border-rose-200 bg-rose-50 text-rose-800">
-            <div className="flex gap-3">
-              <ShieldAlert className="mt-0.5 h-5 w-5" />
+        {errorMessage && (
+          <Card className="border-amber-200 bg-amber-50 text-amber-800">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5" />
               <div>
-                <h2 className="font800">Não foi possível carregar o armazenamento</h2>
-                <p className="mt-1 text-sm">{error}</p>
+                <h2 className="font800">A aba carregou, mas não conseguiu ler o Supabase</h2>
+                <p className="mt-1 text-sm">{errorMessage}</p>
                 <p className="mt-2 text-xs">
-                  Verifique se as funções SQL get_database_usage e get_storage_usage foram executadas no Supabase.
+                  Confirme se você executou as funções get_database_usage e get_storage_usage no SQL Editor.
                 </p>
               </div>
             </div>
@@ -233,105 +185,67 @@ function ArmazenamentoPage() {
         )}
 
         <div className="grid gap-4 xl:grid-cols-2">
-          <UsageCard
-            title="Banco de dados Supabase"
-            subtitle="Limite de referência do plano Free: 500 MB. Aqui ficam pacientes, prontuários, financeiro, estoque, histórico e registros estruturados."
-            icon={Database}
+          <StorageCard
+            title="Banco de dados"
+            description="Limite de referência: 500 MB no plano Free do Supabase."
+            icon="database"
             usage={databaseUsage}
           />
 
-          <UsageCard
-            title="Arquivos no Supabase Storage"
-            subtitle="Limite de referência do plano Free: 1 GB. Aqui ficam PDFs, fotos, radiografias e documentos enviados pelo sistema."
-            icon={HardDrive}
+          <StorageCard
+            title="Supabase Storage"
+            description="Limite de referência: 1 GB para arquivos no plano Free."
+            icon="storage"
             usage={storageUsage}
           />
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-3">
-          <Card className="xl:col-span-1 border-gold/20">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-2xl bg-gold/10 p-3 text-gold">
-                  <Cloud className="h-5 w-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font800">DigitalOcean Spaces</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">Preparado para integração futura.</p>
-                </div>
-              </div>
-              <Badge tone="neutral">Não conectado</Badge>
-            </div>
-
-            <div className="mt-5 space-y-3 text-sm text-muted-foreground">
-              <p>
-                Quando a Oralit migrar arquivos pesados para DigitalOcean Spaces, esta aba pode acompanhar o limite base de 250 GiB.
-              </p>
-              <div className="rounded-2xl border border-border bg-background/70 p-3">
-                <p className="text-xs">Limite de referência</p>
-                <p className="mt-1 text-lg font800 text-foreground">250 GiB</p>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="xl:col-span-2">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-gold" />
-              <h2 className="text-base font800">Alertas</h2>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {alerts.length === 0 ? (
-                <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-800">
-                  <CheckCircle2 className="mt-0.5 h-5 w-5" />
-                  <div>
-                    <p className="font800">Nenhum alerta crítico no momento</p>
-                    <p className="mt-1 text-sm">Banco e arquivos estão abaixo da zona de atenção.</p>
-                  </div>
-                </div>
-              ) : (
-                alerts.map((alert) => (
-                  <div
-                    key={alert.title}
-                    className={`rounded-2xl border p-4 ${
-                      alert.tone === "danger"
-                        ? "border-rose-200 bg-rose-50 text-rose-800"
-                        : "border-amber-200 bg-amber-50 text-amber-800"
-                    }`}
-                  >
-                    <p className="font800">{alert.title}</p>
-                    <p className="mt-1 text-sm">{alert.description}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
-
         <Card>
           <div className="flex items-start gap-3">
-            <Info className="mt-0.5 h-5 w-5 text-gold" />
+            <div className="rounded-2xl bg-gold/10 p-3 text-gold">
+              <Cloud className="h-5 w-5" />
+            </div>
+
             <div>
-              <h2 className="text-base font800">Recomendações automáticas</h2>
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                {[
-                  "Não salve imagens, PDFs ou radiografias diretamente no banco de dados.",
-                  "Use o banco apenas para textos, registros, IDs, datas, permissões e caminhos dos arquivos.",
-                  "Use Storage ou DigitalOcean Spaces para fotos, radiografias, notas fiscais e documentos pesados.",
-                  "Quando o banco passar de 70%, avalie limpeza, compactação, índices e migração de anexos para storage externo.",
-                ].map((item) => (
-                  <div key={item} className="rounded-2xl border border-border bg-background/70 p-3 text-sm text-muted-foreground">
-                    {item}
-                  </div>
-                ))}
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font800">DigitalOcean Spaces</h2>
+                <Badge tone="neutral">Não conectado</Badge>
+              </div>
+
+              <p className="mt-2 text-sm text-muted-foreground">
+                Preparado para integração futura. O plano base do DigitalOcean Spaces inclui 250 GiB para arquivos pesados,
+                como fotos, PDFs, radiografias e documentos clínicos.
+              </p>
+
+              <div className="mt-4 rounded-xl border border-border bg-background p-3">
+                <p className="text-xs text-muted-foreground">Limite de referência</p>
+                <p className="mt-1 text-xl font800">250 GiB</p>
               </div>
             </div>
           </div>
         </Card>
 
-        <p className="text-xs text-muted-foreground">
-          Última atualização: {updatedAt ? updatedAt.toLocaleString("pt-BR") : "ainda não carregado"}. Os limites exibidos são referências configuradas para o controle da Oralit.
-        </p>
+        <Card>
+          <h2 className="text-lg font800">Recomendações</h2>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <p className="rounded-xl border border-border bg-background p-3 text-sm text-muted-foreground">
+              Não salve fotos, PDFs ou radiografias diretamente no banco de dados.
+            </p>
+
+            <p className="rounded-xl border border-border bg-background p-3 text-sm text-muted-foreground">
+              Use o banco apenas para textos, registros, IDs, datas, permissões e caminhos dos arquivos.
+            </p>
+
+            <p className="rounded-xl border border-border bg-background p-3 text-sm text-muted-foreground">
+              Use Storage ou DigitalOcean Spaces para arquivos pesados.
+            </p>
+
+            <p className="rounded-xl border border-border bg-background p-3 text-sm text-muted-foreground">
+              Se passar de 70%, já considere migração ou limpeza de arquivos antigos.
+            </p>
+          </div>
+        </Card>
       </div>
     </AppLayout>
   );
