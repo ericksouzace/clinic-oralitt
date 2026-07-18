@@ -1,69 +1,62 @@
 import React, { useState } from "react";
-import { OdontogramErrorBoundary } from "./OdontogramErrorBoundary";
-import { useOdontogramEntries } from "@/lib/db";
-import { OdontogramMap } from "./OdontogramMap";
-import { OdontogramToolbar } from "./OdontogramToolbar";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button, Label, Textarea } from "@/components/ui-bits";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Label,
-  Textarea,
-  Button,
-} from "@/components/ui-bits";
-import { Trash2 } from "lucide-react";
-import { STATUS_COLORS } from "@/lib/store";
+import { useOdontogramEntries } from "@/lib/db";
+import { STATUS_COLORS, TOOTH_STATUS } from "@/lib/store";
+import { OdontogramErrorBoundary } from "./OdontogramErrorBoundary";
+import { OdontogramMap } from "./OdontogramMap";
+import { OdontogramToolbar } from "./OdontogramToolbar";
 import { useOdontogramCustomTypes } from "./useOdontogramCustomTypes";
-import { toast } from "sonner";
 
 interface Props {
   patientId: string;
 }
 
+function normalize(value: string) {
+  return value.trim().toLocaleLowerCase("pt-BR");
+}
+
 function OdontogramContent({ patientId }: Props) {
-  const [
-    entries,
-    setEntries,
-    loading,
-    error,
-  ] = useOdontogramEntries(patientId);
+  const [entries, setEntries, loading, error] = useOdontogramEntries(patientId);
+  const { types: customTypes } = useOdontogramCustomTypes();
 
-  const {
-    types: customTypes,
-  } = useOdontogramCustomTypes();
+  const [brushStatus, setBrushStatus] = useState(TOOTH_STATUS[0]);
+  const [brushRegion, setBrushRegion] = useState("inteiro");
+  const [selectedRegion, setSelectedRegion] = useState<{
+    tooth: string;
+    region: string;
+  } | null>(null);
+  const [modalNotes, setModalNotes] = useState("");
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
+  const [existingEntryId, setExistingEntryId] = useState<string | null>(null);
+  const [isSavingEntry, setIsSavingEntry] = useState(false);
 
-  const [brushStatus, setBrushStatus] =
-    useState("cárie");
+  const getStatusColor = (status: string) => {
+    const normalized = normalize(status);
 
-  const [brushRegion, setBrushRegion] =
-    useState("dente inteiro");
+    const builtIn = Object.entries(STATUS_COLORS).find(
+      ([key]) => normalize(key) === normalized,
+    );
 
-  const [selectedRegion, setSelectedRegion] =
-    useState<{
-      tooth: string;
-      region: string;
-    } | null>(null);
+    if (builtIn) return builtIn[1];
 
-  const [modalNotes, setModalNotes] =
-    useState("");
-
-  const [
-    isNotesModalOpen,
-    setIsNotesModalOpen,
-  ] = useState(false);
-
-  const [
-    existingEntryId,
-    setExistingEntryId,
-  ] = useState<string | null>(null);
+    return (
+      customTypes.find((type) => normalize(type.name) === normalized)?.color ||
+      "#64748b"
+    );
+  };
 
   if (loading) {
     return (
-      <div className="p-8 text-center animate-pulse text-muted-foreground">
+      <div className="rounded-2xl border border-border bg-white p-10 text-center text-muted-foreground">
         Carregando odontograma...
       </div>
     );
@@ -71,569 +64,247 @@ function OdontogramContent({ patientId }: Props) {
 
   if (error) {
     return (
-      <div className="p-8 text-center bg-rose-50 rounded-lg text-rose-600">
-        <h3 className="font-bold">
-          Erro ao carregar o odontograma
-        </h3>
-
-        <p className="text-sm">
-          {error}
-        </p>
+      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8 text-center text-rose-700">
+        <h3 className="font-bold">Erro ao carregar o odontograma</h3>
+        <p className="mt-1 text-sm">{error}</p>
       </div>
     );
   }
 
-  const normalizeStatus = (
-    value: string
-  ) => {
-    return value
-      .trim()
-      .toLowerCase();
-  };
+  const handleRegionClick = (toothNumber: string, clickedRegion: string) => {
+    const normalizedStatus = normalize(brushStatus);
 
-  const getStatusColor = (
-    status: string
-  ) => {
-    const normalizedStatus =
-      normalizeStatus(status);
+    const forceWholeTooth =
+      brushRegion === "inteiro" ||
+      normalizedStatus === "extração indicada" ||
+      normalizedStatus === "extração realizada" ||
+      normalizedStatus === "ausente";
 
-    const defaultStatusEntry =
-      Object.entries(
-        STATUS_COLORS
-      ).find(
-        ([key]) =>
-          normalizeStatus(key) ===
-          normalizedStatus
-      );
+    const targetRegion = forceWholeTooth ? "inteiro" : clickedRegion;
 
-    if (defaultStatusEntry) {
-      return defaultStatusEntry[1];
-    }
-
-    const custom =
-      (customTypes || []).find(
-        (type) =>
-          normalizeStatus(type.name) ===
-          normalizedStatus
-      );
-
-    if (custom?.color) {
-      return custom.color;
-    }
-
-    console.warn(
-      "Cor não encontrada para a situação:",
-      status
-    );
-
-    return "#64748b";
-  };
-
-  const handleRegionClick = (
-    toothNumber: string,
-    region: string
-  ) => {
-    let targetRegion = region;
-
-    if (
-      brushRegion ===
-        "dente inteiro" ||
-      brushStatus ===
-        "extração indicada" ||
-      brushStatus ===
-        "extração realizada" ||
-      brushStatus ===
-        "ausente"
-    ) {
-      targetRegion =
-        "dente inteiro";
-    }
-
-    const existing =
-      (entries || []).find(
+    const existing = (entries || [])
+      .filter(
         (entry) =>
-          entry.toothNumber ===
-            toothNumber &&
-          entry.toothRegion ===
-            targetRegion
-      );
+          entry.toothNumber === toothNumber &&
+          (entry.toothRegion === targetRegion ||
+            (targetRegion === "inteiro" && entry.toothRegion === "dente inteiro")),
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0];
 
-    setExistingEntryId(
-      existing?.id || null
-    );
-
-    setSelectedRegion({
-      tooth: toothNumber,
-      region: targetRegion,
-    });
-
-    setModalNotes(
-      existing?.notes || ""
-    );
-
+    setExistingEntryId(existing?.id || null);
+    setSelectedRegion({ tooth: toothNumber, region: targetRegion });
+    setModalNotes(existing?.notes || "");
     setIsNotesModalOpen(true);
   };
 
-  const handleSaveEntry =
-    async () => {
-      if (!selectedRegion) {
-        return;
-      }
+  const handleSaveEntry = async () => {
+    if (!selectedRegion || isSavingEntry) return;
 
-      const colorToSave =
-        getStatusColor(
-          brushStatus
-        );
+    try {
+      setIsSavingEntry(true);
 
-      console.log(
-        "Salvando situação:",
-        {
-          status: brushStatus,
-          color: colorToSave,
-        }
-      );
-
+      const now = new Date().toISOString();
       const newEntry = {
         patientId,
-        toothNumber:
-          selectedRegion.tooth,
-        toothRegion:
-          selectedRegion.region,
+        toothNumber: selectedRegion.tooth,
+        toothRegion: selectedRegion.region,
         status: brushStatus,
-        color: colorToSave,
+        color: getStatusColor(brushStatus),
         notes: modalNotes,
+        updatedAt: now,
       };
 
       if (existingEntryId) {
-        await setEntries(
-          (prev) =>
-            (prev || []).map(
-              (entry) =>
-                entry.id ===
-                existingEntryId
-                  ? {
-                      ...entry,
-                      ...newEntry,
-                      updatedAt:
-                        new Date().toISOString(),
-                    }
-                  : entry
-            )
+        await setEntries((previous) =>
+          (previous || []).map((entry) =>
+            entry.id === existingEntryId ? { ...entry, ...newEntry } : entry,
+          ),
         );
       } else {
-        await setEntries(
-          (prev) => [
-            ...(prev || []),
-            {
-              ...newEntry,
-              id:
-                "temp-" +
-                Date.now(),
-              createdAt:
-                new Date().toISOString(),
-              updatedAt:
-                new Date().toISOString(),
-            } as any,
-          ]
-        );
+        await setEntries((previous) => [
+          ...(previous || []),
+          {
+            ...newEntry,
+            id: `temp-${Date.now()}`,
+            userId: "",
+            createdAt: now,
+          },
+        ]);
       }
 
-      setIsNotesModalOpen(
-        false
+      setIsNotesModalOpen(false);
+      toast.success("Marcação salva no odontograma.");
+    } catch (saveError) {
+      console.error(saveError);
+      toast.error("Não foi possível salvar a marcação.");
+    } finally {
+      setIsSavingEntry(false);
+    }
+  };
+
+  const handleDeleteEntry = async () => {
+    if (!existingEntryId) return;
+
+    try {
+      await setEntries((previous) =>
+        (previous || []).filter((entry) => entry.id !== existingEntryId),
       );
-    };
+      setIsNotesModalOpen(false);
+      toast.success("Marcação removida.");
+    } catch (deleteError) {
+      console.error(deleteError);
+      toast.error("Não foi possível excluir a marcação agora.");
+    }
+  };
 
-  const handleDeleteEntry =
-    async () => {
-      if (!existingEntryId) {
-        return;
-      }
-
-      try {
-        await setEntries(
-          (prev) =>
-            (prev || []).filter(
-              (entry) =>
-                entry.id !==
-                existingEntryId
-            )
-        );
-
-        setIsNotesModalOpen(
-          false
-        );
-
-        toast.success(
-          "Marcação removida."
-        );
-      } catch {
-        toast.error(
-          "Não foi possível excluir agora."
-        );
-      }
-    };
+  const legendItems = [
+    ...TOOTH_STATUS.map((status) => ({
+      name: status,
+      color: getStatusColor(status),
+      custom: false,
+    })),
+    ...customTypes.map((type) => ({
+      name: type.name,
+      color: type.color,
+      custom: true,
+    })),
+  ];
 
   return (
-    <div className="flex flex-col gap-8 w-full">
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)] gap-6 w-full items-start">
-        <div className="w-full">
-          <OdontogramToolbar
-            brushStatus={
-              brushStatus
-            }
-            setBrushStatus={
-              setBrushStatus
-            }
-            brushRegion={
-              brushRegion
-            }
-            setBrushRegion={
-              setBrushRegion
-            }
+    <div className="w-full">
+      <div className="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <OdontogramToolbar
+          brushStatus={brushStatus}
+          setBrushStatus={setBrushStatus}
+          brushRegion={brushRegion}
+          setBrushRegion={setBrushRegion}
+        />
+
+        <div className="min-w-0 space-y-4">
+          <OdontogramMap
+            entries={entries || []}
+            onRegionClick={handleRegionClick}
           />
-        </div>
 
-        <div className="w-full min-w-0 flex flex-col gap-4">
-          <div className="flex justify-center w-full min-w-0">
-            <OdontogramMap
-              entries={
-                entries || []
+          <div className="flex min-h-[72px] flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[#e6e1d8] bg-white px-5 py-4 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+            <span className="mr-1 font-semibold text-slate-900">Legenda:</span>
+
+            {legendItems.map((item) => {
+              const normalizedStatus = normalize(item.name);
+
+              if (normalizedStatus === "extração indicada") {
+                return (
+                  <span key={item.name} className="flex items-center gap-1.5">
+                    <span className="font-bold text-[#991b1b]">/</span>
+                    <span className="capitalize">{item.name}</span>
+                  </span>
+                );
               }
-              onRegionClick={
-                handleRegionClick
+
+              if (normalizedStatus === "extração realizada") {
+                return (
+                  <span key={item.name} className="flex items-center gap-1.5">
+                    <span className="font-bold text-slate-900">X</span>
+                    <span className="capitalize">{item.name}</span>
+                  </span>
+                );
               }
-            />
-          </div>
 
-          <div className="p-4 bg-white border border-border rounded-lg shadow-sm flex flex-wrap gap-x-6 gap-y-2 text-xs text-muted-foreground justify-center">
-            <span className="font-bold mr-1 text-foreground">
-              Legenda:
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" />
-              Cárie
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#3b82f6]" />
-              Restauração
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#94a3b8]" />
-              Amálgama
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#a855f7]" />
-              Canal
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#fbbf24]" />
-              Coroa
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#a16207]" />
-              Implante
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]" />
-              Dor
-            </span>
-
-            <span className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#cbd5e1]" />
-              Ausente
-            </span>
-
-            <span className="flex items-center gap-1.5 font-bold text-[#991b1b]">
-              /
-              <span className="font-normal text-muted-foreground">
-                Extração indicada
-              </span>
-            </span>
-
-            <span className="flex items-center gap-1.5 font-bold text-black">
-              X
-              <span className="font-normal text-muted-foreground">
-                Extração realizada
-              </span>
-            </span>
+              return (
+                <span key={`${item.custom ? "custom" : "base"}-${item.name}`} className="flex items-center gap-1.5">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="capitalize">{item.name}</span>
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      <div>
-        <h3 className="text-lg font-bold font-display mb-4">
-          Histórico de Marcações
-        </h3>
-
-        {(!entries ||
-          entries.length ===
-            0) ? (
-          <div className="p-8 text-center text-muted-foreground bg-secondary/50 rounded-lg border border-border">
-            Nenhuma marcação no
-            odontograma ainda.
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {entries.map(
-              (entry) => (
-                <div
-                  key={entry.id}
-                  className="flex items-center justify-between p-3 sm:p-4 bg-white border border-border rounded-lg shadow-sm"
-                >
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold shrink-0 bg-secondary">
-                      {
-                        entry.toothNumber
-                      }
-                    </div>
-
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-full shrink-0"
-                          style={{
-                            backgroundColor:
-                              entry.color ||
-                              getStatusColor(
-                                entry.status
-                              ),
-                          }}
-                        />
-
-                        <span className="font-semibold capitalize text-sm">
-                          {
-                            entry.status
-                          }
-                        </span>
-
-                        <span className="text-xs text-muted-foreground truncate hidden sm:inline-block">
-                          (
-                          {
-                            entry.toothRegion
-                          }
-                          )
-                        </span>
-                      </div>
-
-                      {entry.notes && (
-                        <p className="text-xs text-muted-foreground truncate mt-1">
-                          {
-                            entry.notes
-                          }
-                        </p>
-                      )}
-
-                      <div className="text-[10px] text-muted-foreground mt-1">
-                        {new Date(
-                          entry.createdAt
-                        ).toLocaleDateString(
-                          "pt-BR",
-                          {
-                            hour:
-                              "2-digit",
-                            minute:
-                              "2-digit",
-                          }
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setExistingEntryId(
-                          entry.id
-                        );
-
-                        setSelectedRegion(
-                          {
-                            tooth:
-                              entry.toothNumber,
-                            region:
-                              entry.toothRegion,
-                          }
-                        );
-
-                        setBrushStatus(
-                          entry.status
-                        );
-
-                        setModalNotes(
-                          entry.notes ||
-                            ""
-                        );
-
-                        setIsNotesModalOpen(
-                          true
-                        );
-                      }}
-                    >
-                      Editar
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                      onClick={async () => {
-                        try {
-                          await setEntries(
-                            (
-                              prev
-                            ) =>
-                              (
-                                prev ||
-                                []
-                              ).filter(
-                                (
-                                  item
-                                ) =>
-                                  item.id !==
-                                  entry.id
-                              )
-                          );
-
-                          toast.success(
-                            "Marcação removida."
-                          );
-                        } catch {
-                          toast.error(
-                            "Não foi possível excluir agora."
-                          );
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </div>
-
-      <Dialog
-        open={
-          isNotesModalOpen
-        }
-        onOpenChange={
-          setIsNotesModalOpen
-        }
-      >
-        <DialogContent>
+      <Dialog open={isNotesModalOpen} onOpenChange={setIsNotesModalOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-[#e6e1d8]">
           <DialogHeader>
             <DialogTitle>
-              {existingEntryId
-                ? "Observações do dente selecionado"
-                : "Nova Marcação"}
+              {existingEntryId ? "Editar marcação" : "Nova marcação"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label className="text-xs text-muted-foreground">
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                   Dente
-                </Label>
-
-                <div className="font-bold text-lg">
-                  {
-                    selectedRegion?.tooth
-                  }
+                </div>
+                <div className="mt-1 text-lg font-bold text-slate-900">
+                  {selectedRegion?.tooth}
                 </div>
               </div>
 
-              <div>
-                <Label className="text-xs text-muted-foreground">
+              <div className="rounded-xl bg-slate-50 p-3">
+                <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
                   Região
-                </Label>
-
-                <div className="font-medium capitalize">
-                  {
-                    selectedRegion?.region
-                  }
+                </div>
+                <div className="mt-1 text-sm font-semibold capitalize text-slate-900">
+                  {selectedRegion?.region}
                 </div>
               </div>
             </div>
 
-            <div className="bg-secondary/20 p-3 rounded-lg border border-border">
-              <Label className="text-xs text-muted-foreground">
-                Status / Problema
-              </Label>
-
-              <div className="font-medium text-foreground capitalize flex items-center gap-2 mt-1">
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{
-                    backgroundColor:
-                      getStatusColor(
-                        brushStatus
-                      ),
-                  }}
-                />
-
+            <div className="flex items-center gap-2 rounded-xl border border-border p-3">
+              <span
+                className="h-3.5 w-3.5 rounded-full"
+                style={{ backgroundColor: getStatusColor(brushStatus) }}
+              />
+              <span className="text-sm font-semibold capitalize text-slate-900">
                 {brushStatus}
-              </div>
+              </span>
             </div>
 
-            <div className="space-y-2">
-              <Label>
-                Observação
-                (Opcional)
-              </Label>
-
+            <div>
+              <Label>Observação</Label>
               <Textarea
-                placeholder="Detalhes adicionais sobre este problema..."
-                value={
-                  modalNotes
-                }
-                onChange={(
-                  event
-                ) =>
-                  setModalNotes(
-                    event.target
-                      .value
-                  )
-                }
-                rows={3}
+                placeholder="Detalhes adicionais sobre esta marcação..."
+                value={modalNotes}
+                onChange={(event) => setModalNotes(event.target.value)}
+                rows={4}
               />
             </div>
           </div>
 
-          <DialogFooter className="flex justify-between items-center w-full">
-            {existingEntryId ? (
+          <DialogFooter className="gap-2 sm:space-x-0">
+            {existingEntryId && (
               <Button
+                type="button"
                 variant="outline"
-                className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 border-rose-200"
-                onClick={
-                  handleDeleteEntry
-                }
+                onClick={() => void handleDeleteEntry()}
+                className="mr-auto text-rose-600 hover:bg-rose-50"
               >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Excluir
+                <Trash2 className="h-4 w-4" />
+                Excluir marcação
               </Button>
-            ) : (
-              <div />
             )}
 
             <Button
-              variant="gold"
-              onClick={
-                handleSaveEntry
-              }
+              type="button"
+              variant="ghost"
+              onClick={() => setIsNotesModalOpen(false)}
             >
-              Salvar marcação
+              Cancelar
+            </Button>
+
+            <Button
+              type="button"
+              variant="gold"
+              onClick={() => void handleSaveEntry()}
+              disabled={isSavingEntry}
+            >
+              {isSavingEntry ? "Salvando..." : "Salvar marcação"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -642,16 +313,10 @@ function OdontogramContent({ patientId }: Props) {
   );
 }
 
-export function OdontogramTab({
-  patientId,
-}: Props) {
+export function OdontogramTab({ patientId }: Props) {
   return (
     <OdontogramErrorBoundary>
-      <OdontogramContent
-        patientId={
-          patientId
-        }
-      />
+      <OdontogramContent patientId={patientId} />
     </OdontogramErrorBoundary>
   );
 }
