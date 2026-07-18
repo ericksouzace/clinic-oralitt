@@ -17,14 +17,27 @@ export function OdontogramToolbar({ brushStatus, setBrushStatus, brushRegion, se
   const [customColor, setCustomColor] = useState("#ff00ff");
 
   const handleAddCustom = async () => {
-    if (!customName.trim()) return;
-    const newType = await addType(customName.trim(), customColor);
+  const name = customName.trim();
+
+  if (!name) return;
+
+  try {
+    const newType = await addType(name, customColor);
+
     if (newType) {
       setBrushStatus(newType.name);
       setIsAddingCustom(false);
       setCustomName("");
+      setCustomColor("#ff00ff");
     }
-  };
+  } catch (error) {
+    console.error("Não foi possível salvar a situação:", error);
+
+    alert(
+      "Não foi possível salvar a situação clínica. Verifique se a tabela odontogram_status_types existe no Supabase e se o usuário possui permissão para inserir dados."
+    );
+  }
+};
 
   const getStatusColor = (status: string) => {
     if (STATUS_COLORS[status]) return STATUS_COLORS[status];
