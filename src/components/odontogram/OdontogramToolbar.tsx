@@ -1,6 +1,4 @@
-import React, {
-  useState,
-} from "react";
+import React, { useState } from "react";
 import {
   Button,
   Select,
@@ -41,8 +39,7 @@ export function OdontogramToolbar({
     addType,
     deleteType,
     loading: loadingCustom,
-  } =
-    useOdontogramCustomTypes();
+  } = useOdontogramCustomTypes();
 
   const [
     isAddingCustom,
@@ -67,9 +64,51 @@ export function OdontogramToolbar({
   const [
     deletingId,
     setDeletingId,
-  ] = useState<
-    string | null
-  >(null);
+  ] = useState<string | null>(
+    null
+  );
+
+  const normalizeStatus = (
+    value: string
+  ) => {
+    return value
+      .trim()
+      .toLowerCase();
+  };
+
+  const getStatusColor = (
+    status: string
+  ) => {
+    const normalizedStatus =
+      normalizeStatus(status);
+
+    const defaultStatus =
+      Object.entries(
+        STATUS_COLORS
+      ).find(
+        ([key]) =>
+          normalizeStatus(key) ===
+          normalizedStatus
+      );
+
+    if (defaultStatus) {
+      return defaultStatus[1];
+    }
+
+    const custom =
+      customTypes.find(
+        (type) =>
+          normalizeStatus(
+            type.name
+          ) ===
+          normalizedStatus
+      );
+
+    return (
+      custom?.color ||
+      "#64748b"
+    );
+  };
 
   const handleAddCustom =
     async () => {
@@ -132,7 +171,7 @@ export function OdontogramToolbar({
     ) => {
       const confirmed =
         window.confirm(
-          `Deseja realmente remover a situação "${name}"?`
+          `Deseja realmente excluir a situação "${name}"?`
         );
 
       if (!confirmed) {
@@ -145,8 +184,10 @@ export function OdontogramToolbar({
         await deleteType(id);
 
         if (
-          brushStatus ===
-          name
+          normalizeStatus(
+            brushStatus
+          ) ===
+          normalizeStatus(name)
         ) {
           setBrushStatus(
             TOOTH_STATUS[0]
@@ -154,12 +195,12 @@ export function OdontogramToolbar({
         }
       } catch (error) {
         console.error(
-          "Não foi possível remover a situação:",
+          "Não foi possível excluir a situação personalizada:",
           error
         );
 
         alert(
-          "Não foi possível remover a situação personalizada."
+          `Não foi possível excluir a situação "${name}".`
         );
       } finally {
         setDeletingId(
@@ -187,51 +228,25 @@ export function OdontogramToolbar({
       );
     };
 
-  const getStatusColor = (
-    status: string
-  ) => {
-    const defaultColor =
-      STATUS_COLORS[
-        status
-      ];
-
-    if (defaultColor) {
-      return defaultColor;
-    }
-
-    const custom =
-      customTypes.find(
-        (type) =>
-          type.name
-            .trim()
-            .toLowerCase() ===
-          status
-            .trim()
-            .toLowerCase()
-      );
-
-    return (
-      custom?.color ||
-      "#64748b"
-    );
-  };
-
   return (
     <div className="flex flex-col gap-6 p-4 bg-white border border-border rounded-lg shadow-sm">
       <div className="flex flex-col gap-4">
+
+        {/* SITUAÇÕES CLÍNICAS */}
         <div className="flex-1">
+
           <Label className="mb-2">
-            Selecionar
-            Situação Clínica
+            Selecionar Situação
+            Clínica
           </Label>
 
           <div className="flex flex-wrap gap-2">
+
+            {/* SITUAÇÕES PADRÃO */}
             {TOOTH_STATUS.map(
               (status) => (
                 <button
-                  key={
-                    status
-                  }
+                  key={status}
                   type="button"
                   onClick={() => {
                     setBrushStatus(
@@ -242,30 +257,49 @@ export function OdontogramToolbar({
                       false
                     );
                   }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    brushStatus ===
-                    status
-                      ? "ring-2 ring-offset-1 border-transparent"
-                      : "border-border hover:bg-secondary"
-                  }`}
+                  className={`
+                    flex
+                    items-center
+                    gap-2
+                    px-3
+                    py-1.5
+                    rounded-full
+                    text-xs
+                    font-medium
+                    border
+                    transition-all
+
+                    ${
+                      normalizeStatus(
+                        brushStatus
+                      ) ===
+                      normalizeStatus(
+                        status
+                      )
+                        ? "ring-2 ring-offset-1 border-transparent text-white"
+                        : "border-border hover:bg-secondary"
+                    }
+                  `}
                   style={{
                     backgroundColor:
-                      brushStatus ===
-                      status
+                      normalizeStatus(
+                        brushStatus
+                      ) ===
+                      normalizeStatus(
+                        status
+                      )
                         ? getStatusColor(
                             status
                           )
                         : "transparent",
 
-                    color:
-                      brushStatus ===
-                      status
-                        ? "white"
-                        : "inherit",
-
                     borderColor:
-                      brushStatus ===
-                      status
+                      normalizeStatus(
+                        brushStatus
+                      ) ===
+                      normalizeStatus(
+                        status
+                      )
                         ? getStatusColor(
                             status
                           )
@@ -273,7 +307,7 @@ export function OdontogramToolbar({
                   }}
                 >
                   <div
-                    className="w-3 h-3 rounded-full"
+                    className="w-3 h-3 rounded-full shrink-0"
                     style={{
                       backgroundColor:
                         getStatusColor(
@@ -289,85 +323,180 @@ export function OdontogramToolbar({
               )
             )}
 
+            {/* SITUAÇÕES PERSONALIZADAS */}
             {customTypes.map(
-              (type) => (
-                <div
-                  key={
-                    type.id
-                  }
-                  className="group flex items-center rounded-full border border-border overflow-hidden hover:bg-secondary transition-all"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBrushStatus(
-                        type.name
-                      );
+              (type) => {
+                const isSelected =
+                  normalizeStatus(
+                    brushStatus
+                  ) ===
+                  normalizeStatus(
+                    type.name
+                  );
 
-                      setIsAddingCustom(
-                        false
-                      );
-                    }}
-                    className={`flex items-center gap-2 pl-3 pr-2 py-1.5 text-xs font-medium transition-all ${
-                      brushStatus ===
-                      type.name
-                        ? "ring-2 ring-offset-1"
-                        : ""
-                    }`}
-                    style={{
-                      backgroundColor:
-                        brushStatus ===
-                        type.name
-                          ? type.color
-                          : "transparent",
-
-                      color:
-                        brushStatus ===
-                        type.name
-                          ? "white"
-                          : "inherit",
-                    }}
+                return (
+                  <div
+                    key={type.id}
+                    className="
+                      group
+                      relative
+                      inline-flex
+                      items-center
+                    "
                   >
-                    <div
-                      className="w-3 h-3 rounded-full shrink-0"
+
+                    {/* BOTÃO DA SITUAÇÃO */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBrushStatus(
+                          type.name
+                        );
+
+                        setIsAddingCustom(
+                          false
+                        );
+                      }}
+                      className={`
+                        flex
+                        items-center
+                        gap-2
+
+                        pl-3
+                        pr-8
+                        py-1.5
+
+                        rounded-full
+
+                        text-xs
+                        font-medium
+
+                        border
+
+                        transition-all
+
+                        ${
+                          isSelected
+                            ? "ring-2 ring-offset-1 border-transparent text-white"
+                            : "border-border hover:bg-secondary"
+                        }
+                      `}
                       style={{
                         backgroundColor:
-                          type.color,
+                          isSelected
+                            ? type.color
+                            : "transparent",
+
+                        borderColor:
+                          isSelected
+                            ? type.color
+                            : undefined,
                       }}
-                    />
+                    >
+                      <div
+                        className="
+                          w-3
+                          h-3
+                          rounded-full
+                          shrink-0
+                        "
+                        style={{
+                          backgroundColor:
+                            type.color,
+                        }}
+                      />
 
-                    <span>
-                      {
-                        type.name
+                      <span>
+                        {type.name}
+                      </span>
+                    </button>
+
+                    {/* BOTÃO EXCLUIR */}
+                    <button
+                      type="button"
+                      title={`Excluir ${type.name}`}
+                      aria-label={`Excluir situação ${type.name}`}
+                      disabled={
+                        deletingId ===
+                        type.id
                       }
-                    </span>
-                  </button>
+                      onClick={(
+                        event
+                      ) => {
+                        event.preventDefault();
 
-                  <button
-                    type="button"
-                    title={`Remover ${type.name}`}
-                    disabled={
-                      deletingId ===
-                      type.id
-                    }
-                    onClick={(
-                      event
-                    ) => {
-                      event.stopPropagation();
+                        event.stopPropagation();
 
-                      handleDeleteCustom(
-                        type.id,
-                        type.name
-                      );
-                    }}
-                    className="flex items-center justify-center w-7 h-7 mr-1 rounded-full text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )
+                        handleDeleteCustom(
+                          type.id,
+                          type.name
+                        );
+                      }}
+                      className="
+                        absolute
+
+                        right-1
+                        top-1/2
+
+                        -translate-y-1/2
+
+                        w-6
+                        h-6
+
+                        flex
+                        items-center
+                        justify-center
+
+                        rounded-full
+
+                        text-muted-foreground
+
+                        bg-transparent
+
+                        hover:text-red-600
+                        hover:bg-red-50
+
+                        transition-all
+
+                        opacity-70
+
+                        group-hover:opacity-100
+
+                        disabled:opacity-30
+                        disabled:cursor-not-allowed
+                      "
+                    >
+                      {deletingId ===
+                      type.id ? (
+                        <div
+                          className="
+                            w-3
+                            h-3
+
+                            border-2
+                            border-current
+                            border-t-transparent
+
+                            rounded-full
+
+                            animate-spin
+                          "
+                        />
+                      ) : (
+                        <Trash2
+                          className="
+                            w-3.5
+                            h-3.5
+                          "
+                        />
+                      )}
+                    </button>
+                  </div>
+                );
+              }
             )}
 
+            {/* ADICIONAR SITUAÇÃO */}
             <button
               type="button"
               onClick={() =>
@@ -378,15 +507,39 @@ export function OdontogramToolbar({
                     !current
                 )
               }
-              className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-border hover:bg-secondary text-muted-foreground"
+              className="
+                flex
+                items-center
+                gap-1
+
+                px-3
+                py-1.5
+
+                rounded-full
+
+                text-xs
+                font-medium
+
+                border
+                border-dashed
+                border-border
+
+                hover:bg-secondary
+
+                text-muted-foreground
+
+                transition-colors
+              "
             >
-              + Adicionar
-              situação
+              + Adicionar situação
             </button>
+
           </div>
         </div>
 
+        {/* REGIÃO DO DENTE */}
         <div className="w-full">
+
           <Label className="mb-2">
             Região do Dente
           </Label>
@@ -407,12 +560,8 @@ export function OdontogramToolbar({
             {TOOTH_REGIONS.map(
               (region) => (
                 <option
-                  key={
-                    region
-                  }
-                  value={
-                    region
-                  }
+                  key={region}
+                  value={region}
                   className="capitalize"
                 >
                   {region}
@@ -420,15 +569,38 @@ export function OdontogramToolbar({
               )
             )}
           </Select>
+
         </div>
+
       </div>
 
+      {/* FORMULÁRIO PARA NOVA SITUAÇÃO */}
       {isAddingCustom && (
-        <div className="flex flex-col sm:flex-row gap-3 items-end bg-secondary/30 p-3 rounded-md border border-border mt-2">
-          <div className="flex-1">
+
+        <div
+          className="
+            flex
+            flex-col
+            gap-3
+
+            bg-secondary/30
+
+            p-3
+
+            rounded-md
+
+            border
+            border-border
+
+            mt-2
+          "
+        >
+
+          {/* NOME */}
+          <div className="w-full">
+
             <Label>
-              Nome da
-              Situação
+              Nome da Situação
             </Label>
 
             <Input
@@ -443,19 +615,31 @@ export function OdontogramToolbar({
                     .value
                 )
               }
-              placeholder="Ex: lesão cervical"
+              placeholder="Ex: IML, Faceta, Fratura..."
               disabled={
                 isSavingCustom
               }
             />
+
           </div>
 
-          <div>
+          {/* COR */}
+          <div className="w-full">
+
             <Label>
               Cor
             </Label>
 
-            <div className="flex items-center gap-2 h-9">
+            <div
+              className="
+                flex
+                items-center
+                gap-3
+
+                mt-1
+              "
+            >
+
               <input
                 type="color"
                 value={
@@ -472,40 +656,92 @@ export function OdontogramToolbar({
                 disabled={
                   isSavingCustom
                 }
-                className="w-8 h-8 p-0 border-0 rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+                className="
+                  w-10
+                  h-10
+
+                  p-0
+
+                  border
+                  border-border
+
+                  rounded-md
+
+                  cursor-pointer
+
+                  disabled:cursor-not-allowed
+                  disabled:opacity-50
+                "
               />
+
+              <Input
+                value={
+                  customColor
+                }
+                onChange={(
+                  event
+                ) =>
+                  setCustomColor(
+                    event.target
+                      .value
+                  )
+                }
+                disabled={
+                  isSavingCustom
+                }
+                className="flex-1"
+              />
+
             </div>
+
           </div>
 
-          <Button
-            variant="gold"
-            onClick={
-              handleAddCustom
-            }
-            disabled={
-              !customName.trim() ||
-              loadingCustom ||
-              isSavingCustom
-            }
-          >
-            {isSavingCustom
-              ? "Salvando..."
-              : "Salvar"}
-          </Button>
+          {/* BOTÕES */}
+          <div
+            className="
+              flex
+              items-center
+              gap-2
 
-          <Button
-            variant="ghost"
-            onClick={
-              handleCancelCustom
-            }
-            disabled={
-              isSavingCustom
-            }
+              mt-1
+            "
           >
-            Cancelar
-          </Button>
+
+            <Button
+              variant="gold"
+              onClick={
+                handleAddCustom
+              }
+              disabled={
+                !customName.trim() ||
+                loadingCustom ||
+                isSavingCustom
+              }
+              className="flex-1"
+            >
+              {isSavingCustom
+                ? "Salvando..."
+                : "Salvar"}
+            </Button>
+
+            <Button
+              variant="ghost"
+              onClick={
+                handleCancelCustom
+              }
+              disabled={
+                isSavingCustom
+              }
+            >
+              Cancelar
+            </Button>
+
+          </div>
+
         </div>
+
       )}
+
     </div>
   );
 }
