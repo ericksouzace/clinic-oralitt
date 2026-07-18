@@ -1,6 +1,6 @@
 import React from "react";
+import type { OdontogramEntry } from "@/lib/store";
 import { ToothSvg } from "./ToothSvg";
-import { OdontogramEntry } from "@/lib/store";
 
 const upperRight = [18, 17, 16, 15, 14, 13, 12, 11];
 const upperLeft = [21, 22, 23, 24, 25, 26, 27, 28];
@@ -12,47 +12,73 @@ interface Props {
   onRegionClick: (toothNumber: string, region: string) => void;
 }
 
+function ToothRow({
+  left,
+  right,
+  entries,
+  onRegionClick,
+}: {
+  left: number[];
+  right: number[];
+  entries: OdontogramEntry[];
+  onRegionClick: (toothNumber: string, region: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_1px_1fr] items-center gap-5 px-6">
+      <div className="flex items-center justify-end gap-2.5">
+        {left.map((number) => (
+          <ToothSvg
+            key={number}
+            toothNumber={number.toString()}
+            entries={entries}
+            onRegionClick={onRegionClick}
+          />
+        ))}
+      </div>
+
+      <div className="h-[154px] w-px bg-slate-300" />
+
+      <div className="flex items-center justify-start gap-2.5">
+        {right.map((number) => (
+          <ToothSvg
+            key={number}
+            toothNumber={number.toString()}
+            entries={entries}
+            onRegionClick={onRegionClick}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function OdontogramMap({ entries, onRegionClick }: Props) {
   return (
-    <div className="w-full overflow-x-auto bg-white rounded-xl border border-border p-4">
-      <div className="min-w-max mx-auto flex flex-col items-center gap-8 sm:gap-12">
-        {/* Arcada Superior */}
-        <div className="flex flex-col items-center w-full">
-          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-4">Arcada Superior</h3>
-          <div className="flex gap-2 sm:gap-4 items-center">
-            <div className="flex gap-1 sm:gap-2">
-              {upperRight.map(num => (
-                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-              ))}
-            </div>
-            <div className="w-px h-24 sm:h-32 bg-border mx-1 sm:mx-2" />
-            <div className="flex gap-1 sm:gap-2">
-              {upperLeft.map(num => (
-                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-              ))}
-            </div>
-          </div>
-        </div>
+    <div className="w-full overflow-x-auto rounded-2xl border border-[#e6e1d8] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+      <div className="min-w-[1180px] px-5 pb-7 pt-5">
+        <h3 className="mb-6 text-center text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-800">
+          Arcada Superior
+        </h3>
 
-        <div className="w-full h-px bg-border/50 max-w-4xl" />
+        <ToothRow
+          left={upperRight}
+          right={upperLeft}
+          entries={entries}
+          onRegionClick={onRegionClick}
+        />
 
-        {/* Arcada Inferior */}
-        <div className="flex flex-col items-center w-full">
-          <div className="flex gap-2 sm:gap-4 items-center">
-            <div className="flex gap-1 sm:gap-2">
-              {lowerRight.map(num => (
-                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-              ))}
-            </div>
-            <div className="w-px h-24 sm:h-32 bg-border mx-1 sm:mx-2" />
-            <div className="flex gap-1 sm:gap-2">
-              {lowerLeft.map(num => (
-                <ToothSvg key={num} toothNumber={num.toString()} entries={entries} onRegionClick={onRegionClick} />
-              ))}
-            </div>
-          </div>
-          <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest mt-4">Arcada Inferior</h3>
-        </div>
+        <div className="my-6 h-px w-full bg-slate-300" />
+
+        <ToothRow
+          left={lowerRight}
+          right={lowerLeft}
+          entries={entries}
+          onRegionClick={onRegionClick}
+        />
+
+        <h3 className="mt-6 text-center text-[15px] font-semibold uppercase tracking-[0.18em] text-slate-800">
+          Arcada Inferior
+        </h3>
       </div>
     </div>
   );
