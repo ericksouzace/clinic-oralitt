@@ -16,10 +16,8 @@ import { OdontogramToolbar } from "./OdontogramToolbar";
 import {
   FIXED_ODONTOGRAM_STATUS,
   getFixedStatusColor,
-  getSpecialToothMarker,
   getStatusDisplayName,
   isRootOnlyStatus,
-  isSpecialMarkerStatus,
   normalizeOdontogramStatus,
 } from "./odontogramStatusConfig";
 import { useOdontogramCustomTypes } from "./useOdontogramCustomTypes";
@@ -28,13 +26,8 @@ interface Props {
   patientId: string;
 }
 
-function markerRegionForStatus(status: string) {
-  return `marcador:${normalizeOdontogramStatus(status)}`;
-}
-
 function getRegionDisplayName(region?: string) {
   if (!region) return "";
-  if (region.startsWith("marcador:")) return "Marcação do dente";
   if (region === "inteiro" || region === "dente inteiro") return "Dente inteiro";
   if (region === "raiz/base") return "Raiz / canal";
   return region;
@@ -54,14 +47,6 @@ function OdontogramContent({ patientId }: Props) {
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [existingEntryId, setExistingEntryId] = useState<string | null>(null);
   const [isSavingEntry, setIsSavingEntry] = useState(false);
-
-  const fixedStatusNames = new Set(
-    FIXED_ODONTOGRAM_STATUS.map((status) => normalizeOdontogramStatus(status)),
-  );
-
-  const visibleCustomTypes = customTypes.filter(
-    (type) => !fixedStatusNames.has(normalizeOdontogramStatus(type.name)),
-  );
 
   const getStatusColor = (status: string) => {
     const fixedColor = getFixedStatusColor(status);
@@ -99,15 +84,14 @@ function OdontogramContent({ patientId }: Props) {
     let targetRegion: string;
 
     if (isRootOnlyStatus(brushStatus)) {
-      // CANAL: qualquer clique no dente sempre grava/pinta somente a raiz.
+      // Canal continua sendo aplicado exclusivamente na raiz.
       targetRegion = "raiz/base";
-    } else if (isSpecialMarkerStatus(brushStatus)) {
-      // S, P.V. e N.M. usam regiões lógicas próprias para não sobrescrever
-      // coroa, restauração, canal ou outras marcações do mesmo dente.
-      targetRegion = markerRegionForStatus(brushStatus);
     } else {
+      // Sensibilidade, Pino de Vidro e Núcleo Metálico agora respeitam
+      // a região selecionada, assim como as demais situações clínicas.
       const forceWholeTooth =
         brushRegion === "inteiro" ||
+        brushRegion === "dente inteiro" ||
         normalizedStatus === "extração indicada" ||
         normalizedStatus === "extração realizada" ||
         normalizedStatus === "ausente";
@@ -193,21 +177,8 @@ function OdontogramContent({ patientId }: Props) {
     }
   };
 
-  const legendItems = [
-    ...FIXED_ODONTOGRAM_STATUS.map((status) => ({
-      name: status,
-      color: getStatusColor(status),
-      custom: false,
-    })),
-    ...visibleCustomTypes.map((type) => ({
-      name: type.name,
-      color: type.color,
-      custom: true,
-    })),
-  ];
-
   return (
-    <div className="w-full">
+    <div className="flex w-full flex-col gap-8">
       <div className="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
         <OdontogramToolbar
           brushStatus={brushStatus}
@@ -216,66 +187,111 @@ function OdontogramContent({ patientId }: Props) {
           setBrushRegion={setBrushRegion}
         />
 
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0">
           <OdontogramMap
             entries={entries || []}
             onRegionClick={handleRegionClick}
           />
-
-          <div className="flex min-h-[72px] flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-[#e6e1d8] bg-white px-5 py-4 text-[12px] text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <span className="mr-1 font-semibold text-slate-900">Legenda:</span>
-
-            {legendItems.map((item) => {
-              const normalizedStatus = normalizeOdontogramStatus(item.name);
-              const specialMarker = getSpecialToothMarker(item.name);
-
-              if (normalizedStatus === "extração indicada") {
-                return (
-                  <span key={item.name} className="flex items-center gap-1.5">
-                    <span className="font-bold text-[#991b1b]">/</span>
-                    <span>{getStatusDisplayName(item.name)}</span>
-                  </span>
-                );
-              }
-
-              if (normalizedStatus === "extração realizada") {
-                return (
-                  <span key={item.name} className="flex items-center gap-1.5">
-                    <span className="font-bold text-slate-900">X</span>
-                    <span>{getStatusDisplayName(item.name)}</span>
-                  </span>
-                );
-              }
-
-              if (specialMarker) {
-                return (
-                  <span key={item.name} className="flex items-center gap-1.5">
-                    <span
-                      className="font-black"
-                      style={{ color: item.color }}
-                    >
-                      {specialMarker}
-                    </span>
-                    <span>{getStatusDisplayName(item.name)}</span>
-                  </span>
-                );
-              }
-
-              return (
-                <span
-                  key={`${item.custom ? "custom" : "base"}-${item.name}`}
-                  className="flex items-center gap-1.5"
-                >
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span>{getStatusDisplayName(item.name)}</span>
-                </span>
-              );
-            })}
-          </div>
         </div>
+      </div>
+
+      {/* Histórico de Marcações — restaurado */}
+      <div>
+        <h3 className="mb-4 text-lg font-bold font-display">
+          Histórico de Marcações
+        </h3>
+
+        {!entries || entries.length === 0 ? (
+          <div className="rounded-lg border border-border bg-secondary/50 p-8 text-center text-muted-foreground">
+            Nenhuma marcação no odontograma ainda.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {entries.map((entry) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between rounded-lg border border-border bg-white p-3 shadow-sm sm:p-4"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary font-bold">
+                    {entry.toothNumber}
+                  </div>
+
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor:
+                            entry.color || getStatusColor(entry.status),
+                        }}
+                      />
+
+                      <span className="text-sm font-semibold capitalize">
+                        {getStatusDisplayName(entry.status)}
+                      </span>
+
+                      <span className="hidden truncate text-xs text-muted-foreground sm:inline-block">
+                        ({getRegionDisplayName(entry.toothRegion)})
+                      </span>
+                    </div>
+
+                    {entry.notes && (
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        {entry.notes}
+                      </p>
+                    )}
+
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      {new Date(entry.createdAt).toLocaleDateString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setExistingEntryId(entry.id);
+                      setSelectedRegion({
+                        tooth: entry.toothNumber,
+                        region: entry.toothRegion,
+                      });
+                      setBrushStatus(entry.status);
+                      setModalNotes(entry.notes || "");
+                      setIsNotesModalOpen(true);
+                    }}
+                  >
+                    Editar
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    onClick={async () => {
+                      try {
+                        await setEntries((previous) =>
+                          (previous || []).filter((item) => item.id !== entry.id),
+                        );
+                        toast.success("Marcação removida.");
+                      } catch (deleteError) {
+                        console.error(deleteError);
+                        toast.error("Não foi possível excluir agora.");
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <Dialog open={isNotesModalOpen} onOpenChange={setIsNotesModalOpen}>

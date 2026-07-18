@@ -98,10 +98,6 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
   const isExtracted = normalizedWholeStatus === "extração realizada";
   const isExtractionIndicated = normalizedWholeStatus === "extração indicada";
 
-  const wholeEntryIsVisualMarker = wholeEntry
-    ? isSpecialMarkerStatus(wholeEntry.status)
-    : false;
-
   const wholeEntryIsRootOnly = wholeEntry
     ? isRootOnlyStatus(wholeEntry.status)
     : false;
@@ -110,7 +106,6 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
     wholeEntry &&
     !isExtracted &&
     !isExtractionIndicated &&
-    !wholeEntryIsVisualMarker &&
     !wholeEntryIsRootOnly
       ? wholeEntry.color
       : undefined;
@@ -125,9 +120,9 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
   };
 
   const rootColor =
-    canalEntry?.color ||
-    wholePaint ||
     latestEntry(toothEntries, "raiz/base")?.color ||
+    wholePaint ||
+    canalEntry?.color ||
     EMPTY_FILL;
 
   const crownY = upper ? 78 : 40;

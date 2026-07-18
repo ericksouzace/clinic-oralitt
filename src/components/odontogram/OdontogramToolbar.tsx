@@ -143,12 +143,18 @@ export function OdontogramToolbar({
                   key={status}
                   type="button"
                   onClick={() => setBrushStatus(status)}
-                  className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-left text-[13px] transition-colors ${
+                  className={`relative flex h-8 w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 pl-3 text-left text-[13px] transition-all ${
                     selected
-                      ? "bg-slate-100 font-semibold text-slate-950"
+                      ? "bg-[#fff8e7] font-semibold text-slate-950 ring-1 ring-inset ring-[#d4af37]/45 shadow-[0_1px_2px_rgba(212,175,55,0.10)]"
                       : "text-slate-700 hover:bg-slate-50"
                   }`}
                 >
+                  {selected && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#d4af37]"
+                    />
+                  )}
                   <span
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: color }}
@@ -166,14 +172,23 @@ export function OdontogramToolbar({
               return (
                 <div
                   key={type.id}
-                  className={`group flex h-8 items-center rounded-lg transition-colors ${
-                    selected ? "bg-slate-100" : "hover:bg-slate-50"
+                  className={`group relative flex h-8 items-center overflow-hidden rounded-lg transition-all ${
+                    selected
+                      ? "bg-[#fff8e7] ring-1 ring-inset ring-[#d4af37]/45 shadow-[0_1px_2px_rgba(212,175,55,0.10)]"
+                      : "hover:bg-slate-50"
                   }`}
                 >
+                  {selected && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#d4af37]"
+                    />
+                  )}
+
                   <button
                     type="button"
                     onClick={() => setBrushStatus(type.name)}
-                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-2 text-left text-[13px] ${
+                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-2 pl-3 text-left text-[13px] ${
                       selected ? "font-semibold text-slate-950" : "text-slate-700"
                     }`}
                   >
