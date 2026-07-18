@@ -26,22 +26,27 @@ export function useOdontogramCustomTypes() {
       const { data, error } = await supabase
         .from("odontogram_status_types")
         .select("*")
-        .eq("user_id", user.id);
+        .eq("user_id", user.id)
+        .order("created_at", {
+          ascending: true,
+        });
 
       if (error) {
         console.warn(
-          "Tabela odontogram_status_types pode não existir ainda.",
+          "Erro ao carregar situações personalizadas.",
           error
         );
         return;
       }
 
       if (data) {
-        setTypes(data as CustomToothStatus[]);
+        setTypes(
+          data as CustomToothStatus[]
+        );
       }
     } catch (error) {
       console.error(
-        "Erro ao buscar tipos personalizados:",
+        "Erro ao buscar situações personalizadas:",
         error
       );
     } finally {
@@ -59,22 +64,29 @@ export function useOdontogramCustomTypes() {
     description?: string
   ) => {
     try {
-      const user = await getCurrentUser();
+      const user =
+        await getCurrentUser();
 
       if (!user) {
-        throw new Error("Usuário não autenticado.");
+        throw new Error(
+          "Usuário não autenticado."
+        );
       }
 
-      const { data, error } = await supabase
-        .from("odontogram_status_types")
-        .insert({
-          user_id: user.id,
-          name,
-          color,
-          description: description || null,
-        })
-        .select()
-        .single();
+      const { data, error } =
+        await supabase
+          .from(
+            "odontogram_status_types"
+          )
+          .insert({
+            user_id: user.id,
+            name: name.trim(),
+            color,
+            description:
+              description || null,
+          })
+          .select()
+          .single();
 
       if (error) {
         console.error(
@@ -91,9 +103,13 @@ export function useOdontogramCustomTypes() {
         );
       }
 
-      const newType = data as CustomToothStatus;
+      const newType =
+        data as CustomToothStatus;
 
-      setTypes((prev) => [...prev, newType]);
+      setTypes((prev) => [
+        ...prev,
+        newType,
+      ]);
 
       return newType;
     } catch (error) {
@@ -106,9 +122,75 @@ export function useOdontogramCustomTypes() {
     }
   };
 
+  const deleteType = async (
+    id: string
+  ) => {
+    try {
+      const user =
+        await getCurrentUser();
+
+      if (!user) {
+        throw new Error(
+          "Usuário não autenticado."
+        );
+      }
+
+      const typeToDelete =
+        types.find(
+          (type) =>
+            type.id === id
+        );
+
+      if (!typeToDelete) {
+        throw new Error(
+          "Situação personalizada não encontrada."
+        );
+      }
+
+      const { error } =
+        await supabase
+          .from(
+            "odontogram_status_types"
+          )
+          .delete()
+          .eq("id", id)
+          .eq(
+            "user_id",
+            user.id
+          );
+
+      if (error) {
+        console.error(
+          "Erro ao remover situação personalizada:",
+          error
+        );
+
+        throw error;
+      }
+
+      setTypes((prev) =>
+        prev.filter(
+          (type) =>
+            type.id !== id
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error(
+        "Erro ao excluir tipo:",
+        error
+      );
+
+      throw error;
+    }
+  };
+
   return {
     types,
     addType,
+    deleteType,
     loading,
+    reload: load,
   };
 }
