@@ -1,13 +1,33 @@
-import React, { useState } from "react";
-import { Button, Select, Label, Input } from "@/components/ui-bits";
-import { TOOTH_REGIONS, TOOTH_STATUS, STATUS_COLORS } from "@/lib/store";
-import { useOdontogramCustomTypes } from "./useOdontogramCustomTypes";
+import React, {
+  useState,
+} from "react";
+import {
+  Button,
+  Select,
+  Label,
+  Input,
+} from "@/components/ui-bits";
+import {
+  TOOTH_REGIONS,
+  TOOTH_STATUS,
+  STATUS_COLORS,
+} from "@/lib/store";
+import {
+  useOdontogramCustomTypes,
+} from "./useOdontogramCustomTypes";
+import {
+  Trash2,
+} from "lucide-react";
 
 interface Props {
   brushStatus: string;
-  setBrushStatus: (s: string) => void;
+  setBrushStatus: (
+    status: string
+  ) => void;
   brushRegion: string;
-  setBrushRegion: (r: string) => void;
+  setBrushRegion: (
+    region: string
+  ) => void;
 }
 
 export function OdontogramToolbar({
@@ -19,66 +39,181 @@ export function OdontogramToolbar({
   const {
     types: customTypes,
     addType,
+    deleteType,
     loading: loadingCustom,
-  } = useOdontogramCustomTypes();
+  } =
+    useOdontogramCustomTypes();
 
-  const [isAddingCustom, setIsAddingCustom] = useState(false);
-  const [customName, setCustomName] = useState("");
-  const [customColor, setCustomColor] = useState("#ff00ff");
-  const [isSavingCustom, setIsSavingCustom] = useState(false);
+  const [
+    isAddingCustom,
+    setIsAddingCustom,
+  ] = useState(false);
 
-  const handleAddCustom = async () => {
-    const name = customName.trim();
+  const [
+    customName,
+    setCustomName,
+  ] = useState("");
 
-    if (!name || isSavingCustom) {
-      return;
-    }
+  const [
+    customColor,
+    setCustomColor,
+  ] = useState("#ff00ff");
 
-    try {
-      setIsSavingCustom(true);
+  const [
+    isSavingCustom,
+    setIsSavingCustom,
+  ] = useState(false);
 
-      const newType = await addType(name, customColor);
+  const [
+    deletingId,
+    setDeletingId,
+  ] = useState<
+    string | null
+  >(null);
 
-      if (newType) {
-        setBrushStatus(newType.name);
-        setIsAddingCustom(false);
-        setCustomName("");
-        setCustomColor("#ff00ff");
+  const handleAddCustom =
+    async () => {
+      const name =
+        customName.trim();
+
+      if (
+        !name ||
+        isSavingCustom
+      ) {
+        return;
       }
-    } catch (error) {
-      console.error(
-        "Não foi possível salvar a situação personalizada:",
-        error
+
+      try {
+        setIsSavingCustom(
+          true
+        );
+
+        const newType =
+          await addType(
+            name,
+            customColor
+          );
+
+        if (newType) {
+          setBrushStatus(
+            newType.name
+          );
+
+          setIsAddingCustom(
+            false
+          );
+
+          setCustomName("");
+
+          setCustomColor(
+            "#ff00ff"
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Não foi possível salvar a situação personalizada:",
+          error
+        );
+
+        alert(
+          "Não foi possível salvar a situação clínica."
+        );
+      } finally {
+        setIsSavingCustom(
+          false
+        );
+      }
+    };
+
+  const handleDeleteCustom =
+    async (
+      id: string,
+      name: string
+    ) => {
+      const confirmed =
+        window.confirm(
+          `Deseja realmente remover a situação "${name}"?`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setDeletingId(id);
+
+        await deleteType(id);
+
+        if (
+          brushStatus ===
+          name
+        ) {
+          setBrushStatus(
+            TOOTH_STATUS[0]
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Não foi possível remover a situação:",
+          error
+        );
+
+        alert(
+          "Não foi possível remover a situação personalizada."
+        );
+      } finally {
+        setDeletingId(
+          null
+        );
+      }
+    };
+
+  const handleCancelCustom =
+    () => {
+      if (
+        isSavingCustom
+      ) {
+        return;
+      }
+
+      setIsAddingCustom(
+        false
       );
 
-      alert(
-        "Não foi possível salvar a situação clínica. Verifique a conexão com o banco de dados e tente novamente."
+      setCustomName("");
+
+      setCustomColor(
+        "#ff00ff"
       );
-    } finally {
-      setIsSavingCustom(false);
-    }
-  };
+    };
 
-  const handleCancelCustom = () => {
-    if (isSavingCustom) {
-      return;
-    }
+  const getStatusColor = (
+    status: string
+  ) => {
+    const defaultColor =
+      STATUS_COLORS[
+        status
+      ];
 
-    setIsAddingCustom(false);
-    setCustomName("");
-    setCustomColor("#ff00ff");
-  };
-
-  const getStatusColor = (status: string) => {
-    if (STATUS_COLORS[status]) {
-      return STATUS_COLORS[status];
+    if (defaultColor) {
+      return defaultColor;
     }
 
-    const custom = (customTypes || []).find(
-      (type) => type.name === status
+    const custom =
+      customTypes.find(
+        (type) =>
+          type.name
+            .trim()
+            .toLowerCase() ===
+          status
+            .trim()
+            .toLowerCase()
+      );
+
+    return (
+      custom?.color ||
+      "#64748b"
     );
-
-    return custom ? custom.color : "#000";
   };
 
   return (
@@ -86,101 +221,167 @@ export function OdontogramToolbar({
       <div className="flex flex-col gap-4">
         <div className="flex-1">
           <Label className="mb-2">
-            Selecionar Situação Clínica
+            Selecionar
+            Situação Clínica
           </Label>
 
           <div className="flex flex-wrap gap-2">
-            {TOOTH_STATUS.map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => {
-                  setBrushStatus(status);
-                  setIsAddingCustom(false);
-                }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                  brushStatus === status
-                    ? "ring-2 ring-offset-1 border-transparent"
-                    : "border-border hover:bg-secondary"
-                }`}
-                style={{
-                  backgroundColor:
-                    brushStatus === status
-                      ? getStatusColor(status)
-                      : "transparent",
-                  color:
-                    brushStatus === status
-                      ? "white"
-                      : "inherit",
-                  borderColor:
-                    brushStatus === status
-                      ? getStatusColor(status)
-                      : undefined,
-                }}
-              >
-                <div
-                  className="w-3 h-3 rounded-full"
+            {TOOTH_STATUS.map(
+              (status) => (
+                <button
+                  key={
+                    status
+                  }
+                  type="button"
+                  onClick={() => {
+                    setBrushStatus(
+                      status
+                    );
+
+                    setIsAddingCustom(
+                      false
+                    );
+                  }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    brushStatus ===
+                    status
+                      ? "ring-2 ring-offset-1 border-transparent"
+                      : "border-border hover:bg-secondary"
+                  }`}
                   style={{
                     backgroundColor:
-                      getStatusColor(status),
+                      brushStatus ===
+                      status
+                        ? getStatusColor(
+                            status
+                          )
+                        : "transparent",
+
+                    color:
+                      brushStatus ===
+                      status
+                        ? "white"
+                        : "inherit",
+
+                    borderColor:
+                      brushStatus ===
+                      status
+                        ? getStatusColor(
+                            status
+                          )
+                        : undefined,
                   }}
-                />
+                >
+                  <div
+                    className="w-3 h-3 rounded-full"
+                    style={{
+                      backgroundColor:
+                        getStatusColor(
+                          status
+                        ),
+                    }}
+                  />
 
-                <span className="capitalize">
-                  {status}
-                </span>
-              </button>
-            ))}
+                  <span className="capitalize">
+                    {status}
+                  </span>
+                </button>
+              )
+            )}
 
-            {(customTypes || []).map((type) => (
-              <button
-                key={type.id}
-                type="button"
-                onClick={() => {
-                  setBrushStatus(type.name);
-                  setIsAddingCustom(false);
-                }}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                  brushStatus === type.name
-                    ? "ring-2 ring-offset-1 border-transparent"
-                    : "border-border hover:bg-secondary"
-                }`}
-                style={{
-                  backgroundColor:
-                    brushStatus === type.name
-                      ? type.color
-                      : "transparent",
-                  color:
-                    brushStatus === type.name
-                      ? "white"
-                      : "inherit",
-                  borderColor:
-                    brushStatus === type.name
-                      ? type.color
-                      : undefined,
-                }}
-              >
+            {customTypes.map(
+              (type) => (
                 <div
-                  className="w-3 h-3 rounded-full"
-                  style={{
-                    backgroundColor: type.color,
-                  }}
-                />
+                  key={
+                    type.id
+                  }
+                  className="group flex items-center rounded-full border border-border overflow-hidden hover:bg-secondary transition-all"
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBrushStatus(
+                        type.name
+                      );
 
-                <span>{type.name}</span>
-              </button>
-            ))}
+                      setIsAddingCustom(
+                        false
+                      );
+                    }}
+                    className={`flex items-center gap-2 pl-3 pr-2 py-1.5 text-xs font-medium transition-all ${
+                      brushStatus ===
+                      type.name
+                        ? "ring-2 ring-offset-1"
+                        : ""
+                    }`}
+                    style={{
+                      backgroundColor:
+                        brushStatus ===
+                        type.name
+                          ? type.color
+                          : "transparent",
+
+                      color:
+                        brushStatus ===
+                        type.name
+                          ? "white"
+                          : "inherit",
+                    }}
+                  >
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{
+                        backgroundColor:
+                          type.color,
+                      }}
+                    />
+
+                    <span>
+                      {
+                        type.name
+                      }
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    title={`Remover ${type.name}`}
+                    disabled={
+                      deletingId ===
+                      type.id
+                    }
+                    onClick={(
+                      event
+                    ) => {
+                      event.stopPropagation();
+
+                      handleDeleteCustom(
+                        type.id,
+                        type.name
+                      );
+                    }}
+                    className="flex items-center justify-center w-7 h-7 mr-1 rounded-full text-muted-foreground hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )
+            )}
 
             <button
               type="button"
               onClick={() =>
                 setIsAddingCustom(
-                  (current) => !current
+                  (
+                    current
+                  ) =>
+                    !current
                 )
               }
               className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-border hover:bg-secondary text-muted-foreground"
             >
-              + Adicionar situação
+              + Adicionar
+              situação
             </button>
           </div>
         </div>
@@ -191,20 +392,33 @@ export function OdontogramToolbar({
           </Label>
 
           <Select
-            value={brushRegion}
-            onChange={(event) =>
-              setBrushRegion(event.target.value)
+            value={
+              brushRegion
+            }
+            onChange={(
+              event
+            ) =>
+              setBrushRegion(
+                event.target
+                  .value
+              )
             }
           >
-            {TOOTH_REGIONS.map((region) => (
-              <option
-                key={region}
-                value={region}
-                className="capitalize"
-              >
-                {region}
-              </option>
-            ))}
+            {TOOTH_REGIONS.map(
+              (region) => (
+                <option
+                  key={
+                    region
+                  }
+                  value={
+                    region
+                  }
+                  className="capitalize"
+                >
+                  {region}
+                </option>
+              )
+            )}
           </Select>
         </div>
       </div>
@@ -213,16 +427,26 @@ export function OdontogramToolbar({
         <div className="flex flex-col sm:flex-row gap-3 items-end bg-secondary/30 p-3 rounded-md border border-border mt-2">
           <div className="flex-1">
             <Label>
-              Nome da Situação
+              Nome da
+              Situação
             </Label>
 
             <Input
-              value={customName}
-              onChange={(event) =>
-                setCustomName(event.target.value)
+              value={
+                customName
+              }
+              onChange={(
+                event
+              ) =>
+                setCustomName(
+                  event.target
+                    .value
+                )
               }
               placeholder="Ex: lesão cervical"
-              disabled={isSavingCustom}
+              disabled={
+                isSavingCustom
+              }
             />
           </div>
 
@@ -234,11 +458,20 @@ export function OdontogramToolbar({
             <div className="flex items-center gap-2 h-9">
               <input
                 type="color"
-                value={customColor}
-                onChange={(event) =>
-                  setCustomColor(event.target.value)
+                value={
+                  customColor
                 }
-                disabled={isSavingCustom}
+                onChange={(
+                  event
+                ) =>
+                  setCustomColor(
+                    event.target
+                      .value
+                  )
+                }
+                disabled={
+                  isSavingCustom
+                }
                 className="w-8 h-8 p-0 border-0 rounded cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
@@ -246,7 +479,9 @@ export function OdontogramToolbar({
 
           <Button
             variant="gold"
-            onClick={handleAddCustom}
+            onClick={
+              handleAddCustom
+            }
             disabled={
               !customName.trim() ||
               loadingCustom ||
@@ -260,8 +495,12 @@ export function OdontogramToolbar({
 
           <Button
             variant="ghost"
-            onClick={handleCancelCustom}
-            disabled={isSavingCustom}
+            onClick={
+              handleCancelCustom
+            }
+            disabled={
+              isSavingCustom
+            }
           >
             Cancelar
           </Button>
