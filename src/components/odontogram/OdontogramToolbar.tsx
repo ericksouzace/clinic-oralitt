@@ -1,34 +1,17 @@
 import React, { useState } from "react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Trash2, AlertTriangle, Loader2 } from "lucide-react";
-
+import { Button, Input, Label, Select } from "@/components/ui-bits";
 import {
-  Button,
-  Select,
-  Label,
-  Input,
-} from "@/components/ui-bits";
-
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-
-import {
-  TOOTH_REGIONS,
-  TOOTH_STATUS,
-  STATUS_COLORS,
-} from "@/lib/store";
-
-import {
-  useOdontogramCustomTypes,
-} from "./useOdontogramCustomTypes";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { STATUS_COLORS, TOOTH_REGIONS, TOOTH_STATUS } from "@/lib/store";
+import { useOdontogramCustomTypes } from "./useOdontogramCustomTypes";
 
 interface Props {
   brushStatus: string;
@@ -37,9 +20,13 @@ interface Props {
   setBrushRegion: (region: string) => void;
 }
 
-interface DeleteTarget {
+type DeleteTarget = {
   id: string;
   name: string;
+};
+
+function normalize(value: string) {
+  return value.trim().toLocaleLowerCase("pt-BR");
 }
 
 export function OdontogramToolbar({
@@ -48,722 +35,270 @@ export function OdontogramToolbar({
   brushRegion,
   setBrushRegion,
 }: Props) {
-  const {
-    types: customTypes,
-    addType,
-    deleteType,
-    loading: loadingCustom,
-  } = useOdontogramCustomTypes();
-
-  const [isAddingCustom, setIsAddingCustom] = useState(false);
+  const { types: customTypes, addType, deleteType, loading } =
+    useOdontogramCustomTypes();
 
   const [customName, setCustomName] = useState("");
-
-  const [customColor, setCustomColor] = useState("#ff00ff");
-
-  const [isSavingCustom, setIsSavingCustom] = useState(false);
-
+  const [customColor, setCustomColor] = useState("#7B61FF");
+  const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const [deleteTarget, setDeleteTarget] =
-    useState<DeleteTarget | null>(null);
-
-  const normalizeStatus = (value: string) => {
-    return value.trim().toLowerCase();
-  };
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const getStatusColor = (status: string) => {
-    const normalizedStatus = normalizeStatus(status);
+    const normalized = normalize(status);
 
-    const defaultStatus = Object.entries(
-      STATUS_COLORS
-    ).find(
-      ([key]) =>
-        normalizeStatus(key) === normalizedStatus
+    const builtIn = Object.entries(STATUS_COLORS).find(
+      ([key]) => normalize(key) === normalized,
     );
 
-    if (defaultStatus) {
-      return defaultStatus[1];
-    }
+    if (builtIn) return builtIn[1];
 
-    const custom = customTypes.find(
-      (type) =>
-        normalizeStatus(type.name) === normalizedStatus
+    return (
+      customTypes.find((type) => normalize(type.name) === normalized)?.color ||
+      "#64748b"
     );
-
-    return custom?.color || "#64748b";
   };
 
   const handleAddCustom = async () => {
     const name = customName.trim();
-
-    if (!name || isSavingCustom) {
-      return;
-    }
+    if (!name || isSaving) return;
 
     try {
-      setIsSavingCustom(true);
-
-      const newType = await addType(
-        name,
-        customColor
-      );
-
-      if (newType) {
-        setBrushStatus(newType.name);
-
-        setIsAddingCustom(false);
-
-        setCustomName("");
-
-        setCustomColor("#ff00ff");
-
-        toast.success(
-          `Situação "${newType.name}" adicionada com sucesso.`
-        );
-      }
+      setIsSaving(true);
+      const newType = await addType(name, customColor);
+      setBrushStatus(newType.name);
+      setCustomName("");
+      setCustomColor("#7B61FF");
+      toast.success(`Situação "${newType.name}" adicionada.`);
     } catch (error: any) {
-      console.error(
-        "Não foi possível salvar a situação personalizada:",
-        error
-      );
-
-      const message =
-        error?.message ||
-        "Não foi possível salvar a situação clínica.";
-
-      toast.error(message);
+      toast.error(error?.message || "Não foi possível salvar a situação clínica.");
     } finally {
-      setIsSavingCustom(false);
+      setIsSaving(false);
     }
   };
 
-  const requestDeleteCustom = (
-    id: string,
-    name: string
-  ) => {
-    setDeleteTarget({
-      id,
-      name,
-    });
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) {
-      return;
-    }
-
-    const {
-      id,
-      name,
-    } = deleteTarget;
+  const handleDeleteCustom = async () => {
+    if (!deleteTarget) return;
 
     try {
-      setDeletingId(id);
+      setDeletingId(deleteTarget.id);
+      await deleteType(deleteTarget.id);
 
-      await deleteType(id);
-
-      if (
-        normalizeStatus(brushStatus) ===
-        normalizeStatus(name)
-      ) {
+      if (normalize(brushStatus) === normalize(deleteTarget.name)) {
         setBrushStatus(TOOTH_STATUS[0]);
       }
 
-      toast.success(
-        `Situação "${name}" excluída com sucesso.`
-      );
-
+      toast.success(`Situação "${deleteTarget.name}" excluída.`);
       setDeleteTarget(null);
     } catch (error: any) {
-      console.error(
-        "Não foi possível excluir a situação personalizada:",
-        error
-      );
-
-      const message =
-        error?.message ||
-        `Não foi possível excluir a situação "${name}".`;
-
-      toast.error(message);
+      toast.error(error?.message || "Não foi possível excluir a situação.");
     } finally {
       setDeletingId(null);
     }
   };
 
-  const handleCancelCustom = () => {
-    if (isSavingCustom) {
-      return;
-    }
-
-    setIsAddingCustom(false);
-
-    setCustomName("");
-
-    setCustomColor("#ff00ff");
-  };
-
   return (
     <>
-      <div className="flex flex-col gap-6 p-4 bg-white border border-border rounded-lg shadow-sm">
-        <div className="flex flex-col gap-4">
+      <aside className="w-full rounded-2xl border border-[#e6e1d8] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
+        <div className="mb-5">
+          <h3 className="mb-3 text-sm font-semibold text-slate-900">
+            Selecionar Situação Clínica
+          </h3>
 
-          {/* SITUAÇÕES CLÍNICAS */}
-          <div className="flex-1">
+          <div className="flex flex-col gap-1.5">
+            {TOOTH_STATUS.map((status) => {
+              const selected = normalize(brushStatus) === normalize(status);
+              const color = getStatusColor(status);
 
-            <Label className="mb-2">
-              Selecionar Situação Clínica
-            </Label>
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setBrushStatus(status)}
+                  className={`flex h-8 w-full items-center gap-2.5 rounded-lg px-2 text-left text-[13px] transition-colors ${
+                    selected
+                      ? "bg-slate-100 font-semibold text-slate-950"
+                      : "text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  <span
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ backgroundColor: color }}
+                  />
+                  <span className="capitalize">{status}</span>
+                </button>
+              );
+            })}
 
-            <div className="flex flex-wrap gap-2">
+            {customTypes.map((type) => {
+              const selected = normalize(brushStatus) === normalize(type.name);
 
-              {/* SITUAÇÕES PADRÃO */}
-              {TOOTH_STATUS.map((status) => {
-                const isSelected =
-                  normalizeStatus(brushStatus) ===
-                  normalizeStatus(status);
-
-                return (
+              return (
+                <div
+                  key={type.id}
+                  className={`group flex h-8 items-center rounded-lg transition-colors ${
+                    selected ? "bg-slate-100" : "hover:bg-slate-50"
+                  }`}
+                >
                   <button
-                    key={status}
                     type="button"
-                    onClick={() => {
-                      setBrushStatus(status);
-                      setIsAddingCustom(false);
-                    }}
-                    className={`
-                      flex
-                      items-center
-                      gap-2
-                      px-3
-                      py-1.5
-                      rounded-full
-                      text-xs
-                      font-medium
-                      border
-                      transition-all
-                      ${
-                        isSelected
-                          ? "ring-2 ring-offset-1 border-transparent text-white"
-                          : "border-border hover:bg-secondary"
-                      }
-                    `}
-                    style={{
-                      backgroundColor:
-                        isSelected
-                          ? getStatusColor(status)
-                          : "transparent",
-
-                      borderColor:
-                        isSelected
-                          ? getStatusColor(status)
-                          : undefined,
-                    }}
+                    onClick={() => setBrushStatus(type.name)}
+                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-2 text-left text-[13px] ${
+                      selected ? "font-semibold text-slate-950" : "text-slate-700"
+                    }`}
                   >
-                    <div
-                      className="w-3 h-3 rounded-full shrink-0"
-                      style={{
-                        backgroundColor:
-                          getStatusColor(status),
-                      }}
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: type.color }}
                     />
-
-                    <span className="capitalize">
-                      {status}
-                    </span>
+                    <span className="truncate">{type.name}</span>
                   </button>
-                );
-              })}
 
-              {/* SITUAÇÕES PERSONALIZADAS */}
-              {customTypes.map((type) => {
-                const isSelected =
-                  normalizeStatus(brushStatus) ===
-                  normalizeStatus(type.name);
-
-                const isDeleting =
-                  deletingId === type.id;
-
-                return (
-                  <div
-                    key={type.id}
-                    className="
-                      group
-                      relative
-                      inline-flex
-                      items-center
-                    "
+                  <button
+                    type="button"
+                    aria-label={`Excluir ${type.name}`}
+                    title={`Excluir ${type.name}`}
+                    onClick={() => setDeleteTarget({ id: type.id, name: type.name })}
+                    className="mr-1 grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 opacity-70 transition hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setBrushStatus(type.name);
-
-                        setIsAddingCustom(false);
-                      }}
-                      className={`
-                        flex
-                        items-center
-                        gap-2
-                        pl-3
-                        pr-8
-                        py-1.5
-                        rounded-full
-                        text-xs
-                        font-medium
-                        border
-                        transition-all
-                        ${
-                          isSelected
-                            ? "ring-2 ring-offset-1 border-transparent text-white"
-                            : "border-border hover:bg-secondary"
-                        }
-                      `}
-                      style={{
-                        backgroundColor:
-                          isSelected
-                            ? type.color
-                            : "transparent",
-
-                        borderColor:
-                          isSelected
-                            ? type.color
-                            : undefined,
-                      }}
-                    >
-                      <div
-                        className="
-                          w-3
-                          h-3
-                          rounded-full
-                          shrink-0
-                        "
-                        style={{
-                          backgroundColor:
-                            type.color,
-                        }}
-                      />
-
-                      <span>
-                        {type.name}
-                      </span>
-                    </button>
-
-                    <button
-                      type="button"
-                      title={`Excluir ${type.name}`}
-                      aria-label={`Excluir situação ${type.name}`}
-                      disabled={isDeleting}
-                      onClick={(event) => {
-                        event.preventDefault();
-
-                        event.stopPropagation();
-
-                        requestDeleteCustom(
-                          type.id,
-                          type.name
-                        );
-                      }}
-                      className="
-                        absolute
-                        right-1
-                        top-1/2
-                        -translate-y-1/2
-                        w-6
-                        h-6
-                        flex
-                        items-center
-                        justify-center
-                        rounded-full
-                        text-muted-foreground
-                        hover:text-red-600
-                        hover:bg-red-50
-                        transition-all
-                        opacity-70
-                        group-hover:opacity-100
-                        disabled:opacity-30
-                        disabled:cursor-not-allowed
-                      "
-                    >
-                      {isDeleting ? (
-                        <Loader2
-                          className="
-                            w-3.5
-                            h-3.5
-                            animate-spin
-                          "
-                        />
-                      ) : (
-                        <Trash2
-                          className="
-                            w-3.5
-                            h-3.5
-                          "
-                        />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-
-              {/* ADICIONAR NOVA SITUAÇÃO */}
-              <button
-                type="button"
-                onClick={() =>
-                  setIsAddingCustom(
-                    (current) => !current
-                  )
-                }
-                className="
-                  flex
-                  items-center
-                  gap-1
-                  px-3
-                  py-1.5
-                  rounded-full
-                  text-xs
-                  font-medium
-                  border
-                  border-dashed
-                  border-border
-                  hover:bg-secondary
-                  text-muted-foreground
-                  transition-colors
-                "
-              >
-                + Adicionar situação
-              </button>
-
-            </div>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
 
-          {/* REGIÃO DO DENTE */}
-          <div className="w-full">
-
-            <Label className="mb-2">
-              Região do Dente
-            </Label>
-
-            <Select
-              value={brushRegion}
-              onChange={(event) =>
-                setBrushRegion(
-                  event.target.value
-                )
-              }
-            >
-              {TOOTH_REGIONS.map(
-                (region) => (
-                  <option
-                    key={region}
-                    value={region}
-                    className="capitalize"
-                  >
-                    {region}
-                  </option>
-                )
-              )}
-            </Select>
-
-          </div>
-
+          <button
+            type="button"
+            onClick={() => {
+              setCustomName("");
+              window.setTimeout(() => {
+                document.getElementById("odontogram-custom-name")?.focus();
+              }, 0);
+            }}
+            className="mt-3 flex h-9 w-full items-center justify-center rounded-xl border border-dashed border-slate-300 text-[12px] font-medium text-slate-600 transition hover:border-slate-400 hover:bg-slate-50"
+          >
+            + Adicionar situação
+          </button>
         </div>
 
-        {/* FORMULÁRIO PARA NOVA SITUAÇÃO */}
-        {isAddingCustom && (
-          <div
-            className="
-              flex
-              flex-col
-              gap-3
-              bg-secondary/30
-              p-3
-              rounded-md
-              border
-              border-border
-              mt-2
-            "
+        <div className="mb-5">
+          <Label>Região do Dente</Label>
+          <Select
+            value={brushRegion}
+            onChange={(event) => setBrushRegion(event.target.value)}
+            className="h-11 rounded-xl bg-white"
           >
+            {TOOTH_REGIONS.map((region) => (
+              <option key={region} value={region} className="capitalize">
+                {region === "inteiro" ? "Inteiro" : region}
+              </option>
+            ))}
+          </Select>
+        </div>
 
-            <div className="w-full">
-
-              <Label>
-                Nome da Situação
-              </Label>
-
-              <Input
-                value={customName}
-                onChange={(event) =>
-                  setCustomName(
-                    event.target.value
-                  )
-                }
-                placeholder="Ex: IML, Faceta, Fratura..."
-                disabled={isSavingCustom}
-              />
-
-            </div>
-
-            <div className="w-full">
-
-              <Label>
-                Cor
-              </Label>
-
-              <div
-                className="
-                  flex
-                  items-center
-                  gap-3
-                  mt-1
-                "
-              >
-
-                <input
-                  type="color"
-                  value={customColor}
-                  onChange={(event) =>
-                    setCustomColor(
-                      event.target.value
-                    )
-                  }
-                  disabled={isSavingCustom}
-                  className="
-                    w-10
-                    h-10
-                    p-0
-                    border
-                    border-border
-                    rounded-md
-                    cursor-pointer
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                  "
-                />
-
-                <Input
-                  value={customColor}
-                  onChange={(event) =>
-                    setCustomColor(
-                      event.target.value
-                    )
-                  }
-                  disabled={isSavingCustom}
-                  className="flex-1"
-                />
-
-              </div>
-
-            </div>
-
-            <div
-              className="
-                flex
-                items-center
-                gap-2
-                mt-1
-              "
-            >
-
-              <Button
-                variant="gold"
-                onClick={handleAddCustom}
-                disabled={
-                  !customName.trim() ||
-                  loadingCustom ||
-                  isSavingCustom
-                }
-                className="flex-1"
-              >
-                {isSavingCustom
-                  ? "Salvando..."
-                  : "Salvar"}
-              </Button>
-
-              <Button
-                variant="ghost"
-                onClick={handleCancelCustom}
-                disabled={isSavingCustom}
-              >
-                Cancelar
-              </Button>
-
-            </div>
-
+        <div className="rounded-xl border border-[#e8e3da] bg-[#fcfbf8] p-3.5">
+          <div className="mb-3">
+            <Label>Nome da Situação</Label>
+            <Input
+              id="odontogram-custom-name"
+              value={customName}
+              onChange={(event) => setCustomName(event.target.value)}
+              placeholder="Ex.: Faceta, Rachadura..."
+              disabled={isSaving}
+              className="h-10 bg-white"
+            />
           </div>
-        )}
 
-      </div>
+          <div className="mb-3">
+            <Label>Cor</Label>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={customColor}
+                onChange={(event) => setCustomColor(event.target.value)}
+                disabled={isSaving}
+                className="h-10 w-12 cursor-pointer rounded-lg border border-input bg-white p-1"
+              />
+              <Input
+                value={customColor.toUpperCase()}
+                onChange={(event) => setCustomColor(event.target.value)}
+                disabled={isSaving}
+                className="h-10 bg-white font-mono uppercase"
+              />
+            </div>
+          </div>
 
-      {/* MODAL DE EXCLUSÃO DO PRÓPRIO ORALIT */}
-      <AlertDialog
+          <Button
+            type="button"
+            variant="gold"
+            onClick={handleAddCustom}
+            disabled={!customName.trim() || isSaving || loading}
+            className="h-11 w-full rounded-xl"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              "Salvar situação"
+            )}
+          </Button>
+        </div>
+      </aside>
+
+      <Dialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => {
-          if (
-            !open &&
-            !deletingId
-          ) {
-            setDeleteTarget(null);
-          }
+          if (!open && !deletingId) setDeleteTarget(null);
         }}
       >
-        <AlertDialogContent
-          className="
-            sm:max-w-[430px]
-            rounded-2xl
-            border
-            border-border
-            bg-white
-            shadow-2xl
-            p-0
-            overflow-hidden
-          "
-        >
-          <div
-            className="
-              flex
-              flex-col
-              items-center
-              text-center
-              px-6
-              pt-7
-              pb-5
-            "
-          >
-            <div
-              className="
-                w-12
-                h-12
-                rounded-full
-                bg-red-50
-                flex
-                items-center
-                justify-center
-                mb-4
-              "
-            >
-              <AlertTriangle
-                className="
-                  w-6
-                  h-6
-                  text-red-600
-                "
-              />
-            </div>
-
-            <AlertDialogHeader
-              className="
-                text-center
-                sm:text-center
-                space-y-2
-              "
-            >
-              <AlertDialogTitle
-                className="
-                  text-lg
-                  font-semibold
-                  text-foreground
-                "
-              >
-                Excluir situação clínica?
-              </AlertDialogTitle>
-
-              <AlertDialogDescription
-                className="
-                  text-sm
-                  text-muted-foreground
-                  leading-relaxed
-                "
-              >
-                Você está prestes a excluir a situação{" "}
-                <strong
-                  className="
-                    font-semibold
-                    text-foreground
-                  "
-                >
-                  “{deleteTarget?.name}”
-                </strong>
-                .
-                <br />
-                Essa ação removerá a opção da sua lista de
-                situações personalizadas.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
+        <DialogContent className="max-w-[430px] rounded-2xl border-[#e6e1d8] p-0">
+          <div className="px-6 pb-2 pt-6">
+            <DialogHeader>
+              <DialogTitle>Excluir situação clínica?</DialogTitle>
+              <DialogDescription className="pt-2 leading-relaxed">
+                A situação personalizada <strong>“{deleteTarget?.name}”</strong> será
+                removida da lista. As marcações já registradas nos pacientes serão
+                preservadas.
+              </DialogDescription>
+            </DialogHeader>
           </div>
 
-          <AlertDialogFooter
-            className="
-              flex
-              flex-col-reverse
-              sm:flex-row
-              gap-2
-              sm:gap-2
-              px-6
-              py-4
-              bg-secondary/30
-              border-t
-              border-border
-            "
-          >
-            <AlertDialogCancel
+          <DialogFooter className="gap-2 border-t border-[#e6e1d8] bg-[#fcfbf8] px-6 py-4 sm:space-x-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
               disabled={Boolean(deletingId)}
-              className="
-                mt-0
-                flex-1
-                rounded-lg
-              "
+              className="flex-1"
             >
               Cancelar
-            </AlertDialogCancel>
+            </Button>
 
-            <AlertDialogAction
+            <Button
+              type="button"
+              variant="danger"
+              onClick={() => void handleDeleteCustom()}
               disabled={Boolean(deletingId)}
-              onClick={(event) => {
-                event.preventDefault();
-
-                void handleConfirmDelete();
-              }}
-              className="
-                flex-1
-                rounded-lg
-                bg-red-600
-                text-white
-                hover:bg-red-700
-                focus:ring-red-600
-              "
+              className="flex-1"
             >
               {deletingId ? (
                 <>
-                  <Loader2
-                    className="
-                      w-4
-                      h-4
-                      mr-2
-                      animate-spin
-                    "
-                  />
-
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Excluindo...
                 </>
               ) : (
                 <>
-                  <Trash2
-                    className="
-                      w-4
-                      h-4
-                      mr-2
-                    "
-                  />
-
+                  <Trash2 className="h-4 w-4" />
                   Excluir situação
                 </>
               )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
