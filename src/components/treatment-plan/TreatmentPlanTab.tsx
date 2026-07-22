@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, Edit3, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button, Card, Input, Label, Select } from "@/components/ui-bits";
+import { Button, Card, Input, Label } from "@/components/ui-bits";
 import {
   Dialog,
   DialogContent,
@@ -134,7 +134,10 @@ export function TreatmentPlanTab({ patientId }: Props) {
 
   const openEditItemModal = (item: TreatmentPlanItem) => {
     const teeth = parseTeeth(item.toothNumber);
-    setItemDraft(item);
+    setItemDraft({
+      ...item,
+      description: getItemLabel(item, procedures),
+    });
     setUseTeeth(teeth.length > 0);
     setSelectedTeeth(teeth);
     setIsItemModalOpen(true);
@@ -148,19 +151,10 @@ export function TreatmentPlanTab({ patientId }: Props) {
     );
   };
 
-  const handleProcedureSelect = (procedureId: string) => {
-    const procedure = procedures.find((item) => item.id === procedureId);
-    setItemDraft((current) => ({
-      ...current,
-      procedureId: procedureId || undefined,
-      description: procedure?.name || current.description,
-    }));
-  };
-
   const handleSaveItem = async () => {
     if (savingItem) return;
-    if (!itemDraft.procedureId && !itemDraft.description?.trim()) {
-      toast.error("Selecione um procedimento.");
+    if (!itemDraft.description?.trim()) {
+      toast.error("Digite o procedimento.");
       return;
     }
 
@@ -168,21 +162,17 @@ export function TreatmentPlanTab({ patientId }: Props) {
       setSavingItem(true);
       const treatmentPlanId = itemDraft.treatmentPlanId || (await ensurePlanId());
       const now = new Date().toISOString();
-      const procedure = procedures.find(
-        (candidate) => candidate.id === itemDraft.procedureId,
-      );
-
       const item: TreatmentPlanItem = {
         id: itemDraft.id || `temp-${uid()}`,
         userId: itemDraft.userId || "",
         treatmentPlanId,
-        procedureId: itemDraft.procedureId,
+        procedureId: undefined,
         toothNumber:
           useTeeth && selectedTeeth.length > 0
             ? selectedTeeth.join(", ")
             : undefined,
         toothRegion: undefined,
-        description: itemDraft.description || procedure?.name,
+        description: itemDraft.description.trim(),
         priority: itemDraft.priority || "média",
         estimatedPrice: itemDraft.estimatedPrice || 0,
         status: itemDraft.status || "planejado",
@@ -602,17 +592,18 @@ export function TreatmentPlanTab({ patientId }: Props) {
           <div className="space-y-5 py-3">
             <div>
               <Label>Procedimento</Label>
-              <Select
-                value={itemDraft.procedureId || ""}
-                onChange={(event) => handleProcedureSelect(event.target.value)}
-              >
-                <option value="">Selecione...</option>
-                {procedures.map((procedure) => (
-                  <option key={procedure.id} value={procedure.id}>
-                    {procedure.name}
-                  </option>
-                ))}
-              </Select>
+              <Input
+                value={itemDraft.description || ""}
+                onChange={(event) =>
+                  setItemDraft((current) => ({
+                    ...current,
+                    procedureId: undefined,
+                    description: event.target.value,
+                  }))
+                }
+                placeholder="Digite o procedimento"
+                autoFocus
+              />
             </div>
 
             <div className="flex items-center justify-between rounded-xl border border-border px-4 py-3">
