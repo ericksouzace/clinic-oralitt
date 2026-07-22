@@ -43,7 +43,7 @@ export type Settings = {
   rounding: number; // 0, 5, 10, 50, 100
 };
 
-export type PatientStatus = "em tratamento" | "em acompanhamento";
+export type PatientStatus = "inativo" | "em tratamento" | "em acompanhamento" | "marcar c/ parceiros";
 
 export type Patient = {
   id: string;
@@ -375,7 +375,7 @@ export const PROCEDURE_CATEGORIES = [
   "Radiologia","Outro"
 ];
 
-export const PATIENT_STATUS: PatientStatus[] = ["em tratamento", "em acompanhamento"];
+export const PATIENT_STATUS: PatientStatus[] = ["inativo", "em tratamento", "em acompanhamento", "marcar c/ parceiros"];
 
 export const PATIENT_GENDERS = ["Masculino", "Feminino", "Outro"];
 
