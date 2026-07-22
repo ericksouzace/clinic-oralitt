@@ -45,7 +45,9 @@ const TAB_MAP = {
 } as const;
 
 type TabType = keyof typeof TAB_MAP;
-const TABS = Object.keys(TAB_MAP) as TabType[];
+const TABS = (Object.keys(TAB_MAP) as TabType[]).filter(
+  (tab) => tab !== "resumo" && tab !== "fotos-clinicas",
+);
 
 function PatientProfilePage() {
   const { patientId } = Route.useParams();
@@ -108,7 +110,7 @@ function PatientProfilePage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab") as TabType;
-      if (tab && TAB_MAP[tab]) {
+      if (tab && TABS.includes(tab)) {
         return tab;
       }
     }
@@ -129,7 +131,7 @@ function PatientProfilePage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab") as TabType;
-      if (tab && TAB_MAP[tab] && tab !== activeTab) {
+      if (tab && TABS.includes(tab) && tab !== activeTab) {
         setActiveTabState(tab);
       }
     }
@@ -386,12 +388,25 @@ function PatientProfilePage() {
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-2xl font-display font-bold text-foreground">{patient.fullName}</h1>
-            <Badge variant={
-              patient.status === "ativo" || patient.status === "em tratamento" ? "success" : 
-              patient.status === "retorno" ? "warning" : "secondary"
-            } className="capitalize">
-              {patient.status}
-            </Badge>
+            <span
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                patient.status === "em tratamento"
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  : patient.status === "em acompanhamento"
+                    ? "border-amber-200 bg-amber-50 text-amber-800"
+                    : patient.status === "marcar c/ parceiros"
+                      ? "border-violet-200 bg-violet-50 text-violet-700"
+                      : "border-slate-200 bg-slate-100 text-slate-700"
+              }`}
+            >
+              {patient.status === "em tratamento"
+                ? "Em Tratamento"
+                : patient.status === "em acompanhamento"
+                  ? "Em Acompanhamento"
+                  : patient.status === "marcar c/ parceiros"
+                    ? "Marcar c/ Parceiros"
+                    : "Inativo"}
+            </span>
           </div>
           
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
