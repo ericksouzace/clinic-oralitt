@@ -20,12 +20,13 @@ import {
   deletePayment,
   updateInstallmentStatus,
   useTreatmentPlans,
-  usePatients
+  usePatients,
+  useClinicalRecords
 } from "@/lib/db";
 import { Budget, BudgetItem, PaymentInstallment, Payment, PaymentSplit, Procedure, uid } from "@/lib/store";
 import { sendWhatsAppMessage, getWhatsAppTemplates, renderWhatsAppTemplate } from "@/lib/whatsapp";
 
-type SubTab = "resumo" | "orcamentos" | "parcelas" | "pagamentos" | "acoes";
+type SubTab = "resumo" | "realizados" | "orcamentos" | "parcelas" | "pagamentos" | "acoes";
 
 export function FinanceTab({ patientId }: { patientId: string }) {
   const [budgets, bError, bLoading, bMissing] = useBudgets(patientId);
@@ -34,6 +35,7 @@ export function FinanceTab({ patientId }: { patientId: string }) {
   const [procedures] = useProcedures();
   const [plans, plansError, plansLoading] = useTreatmentPlans(patientId);
   const [patients] = usePatients();
+  const [clinicalRecords, , clinicalLoading] = useClinicalRecords(patientId);
   
   const patient = patients.find(p => p.id === patientId);
 
@@ -86,6 +88,11 @@ export function FinanceTab({ patientId }: { patientId: string }) {
   const [renegotiateModal, setRenegotiateModal] = useState<PaymentInstallment | null>(null);
   const [payDetailsModal, setPayDetailsModal] = useState<Payment | null>(null);
 
+  const realizedRecords = useMemo(
+    () => clinicalRecords.filter(record => Number(record.chargedAmount || 0) > 0),
+    [clinicalRecords]
+  );
+
   // Stats
   const stats = useMemo(() => {
     const totalOrcado = budgets.reduce((acc, b) => acc + (b.totalAmount || 0), 0);
@@ -97,8 +104,9 @@ export function FinanceTab({ patientId }: { patientId: string }) {
     const parcelasVencidas = installments.filter(i => i.status !== "pago" && i.status !== "cancelado" && new Date(i.dueDate || "") < new Date()).length;
     const qtdOrcamentos = budgets.length;
     const qtdPagamentos = payments.length;
-    return { totalOrcado, totalAprovado, totalPago, saldoAberto, parcelasPendentes, parcelasParciais, parcelasVencidas, qtdOrcamentos, qtdPagamentos };
-  }, [budgets, payments, installments]);
+    const totalRealizado = realizedRecords.reduce((acc, record) => acc + Number(record.chargedAmount || 0), 0);
+    return { totalOrcado, totalAprovado, totalPago, saldoAberto, parcelasPendentes, parcelasParciais, parcelasVencidas, qtdOrcamentos, qtdPagamentos, totalRealizado };
+  }, [budgets, payments, installments, realizedRecords]);
 
   const approvedBudgets = budgets.filter(b => b.status === "aprovado");
 
@@ -173,12 +181,13 @@ export function FinanceTab({ patientId }: { patientId: string }) {
     );
   }
 
-  if (bLoading || iLoading || pLoading) {
+  if (bLoading || iLoading || pLoading || clinicalLoading) {
     return <div className="p-8 text-center text-gray-500 animate-pulse">Carregando financeiro...</div>;
   }
 
   const SUB_TABS: { key: SubTab; label: string }[] = [
     { key: "resumo", label: "Resumo" },
+    { key: "realizados", label: "Procedimentos realizados" },
     { key: "orcamentos", label: "Orçamentos" },
     { key: "parcelas", label: "Parcelas" },
     { key: "pagamentos", label: "Pagamentos realizados" },
@@ -207,7 +216,8 @@ export function FinanceTab({ patientId }: { patientId: string }) {
       {/* ==================== RESUMO ==================== */}
       {subTab === "resumo" && (
         <div className="space-y-6 animate-in fade-in duration-200">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <StatCard title="Total Realizado" value={stats.totalRealizado} className="bg-[#fff9e8] text-[#7a5a10] border-[#ead9a3]" />
             <StatCard title="Total Orçado" value={stats.totalOrcado} />
             <StatCard title="Total Aprovado" value={stats.totalAprovado} className="bg-green-50 text-green-900 border-green-200" />
             <StatCard title="Total Pago" value={stats.totalPago} className="bg-green-50 text-green-900 border-green-200" />
@@ -233,6 +243,54 @@ export function FinanceTab({ patientId }: { patientId: string }) {
             <Button variant="outline" className="!bg-gray-100 hover:!bg-gray-200 !text-gray-700 hover:!text-gray-900 !border-gray-200 font-semibold" onClick={() => window.location.reload()}>
               <RefreshCcw className="w-4 h-4 mr-2" /> Atualizar resumo
             </Button>
+          </div>
+        </div>
+      )}
+
+      {subTab === "realizados" && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl border overflow-hidden">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="p-3 font-medium text-gray-600">Data</th>
+                  <th className="p-3 font-medium text-gray-600">Procedimento</th>
+                  <th className="p-3 font-medium text-gray-600">Dentes</th>
+                  <th className="p-3 font-medium text-gray-600 text-right">Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {realizedRecords.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-gray-500">
+                      Nenhum procedimento realizado.
+                    </td>
+                  </tr>
+                )}
+                {realizedRecords.map(record => (
+                  <tr key={record.id} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="p-3">{formatDateBR(record.recordDate)}</td>
+                    <td className="p-3 font-medium">{record.procedureName || record.description || "Procedimento"}</td>
+                    <td className="p-3 text-gray-600">
+                      {record.teeth && record.teeth.length > 0 ? record.teeth.join(", ") : "—"}
+                    </td>
+                    <td className="p-3 text-right font-semibold text-[#8A6A16]">
+                      {formatCurrency(record.chargedAmount || 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              {realizedRecords.length > 0 && (
+                <tfoot className="border-t bg-[#fcfbf8]">
+                  <tr>
+                    <td colSpan={3} className="p-3 font-semibold">Total</td>
+                    <td className="p-3 text-right font-bold text-[#8A6A16]">
+                      {formatCurrency(stats.totalRealizado)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
           </div>
         </div>
       )}
