@@ -20,6 +20,13 @@ interface Props {
   patientId: string;
 }
 
+const TOOTH_NUMBERS = [
+  "18", "17", "16", "15", "14", "13", "12", "11",
+  "21", "22", "23", "24", "25", "26", "27", "28",
+  "48", "47", "46", "45", "44", "43", "42", "41",
+  "31", "32", "33", "34", "35", "36", "37", "38",
+];
+
 export function ClinicalRecordTab({ patientId }: Props) {
   const [records, error, loading, tablesMissing, refetch] = useClinicalRecords(patientId);
   const [procedures] = useProcedures();
@@ -31,6 +38,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [draft, setDraft] = useState<Partial<ClinicalRecord>>({});
   const [draftSupplies, setDraftSupplies] = useState<Partial<ClinicalRecordSupply>[]>([]);
+  const [selectTeeth, setSelectTeeth] = useState(false);
 
   // Supply add state
   const [selectedSupplyId, setSelectedSupplyId] = useState("");
@@ -94,6 +102,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
           setDraftSupplies([]);
         }
 
+        setSelectTeeth(false);
         setIsModalOpen(true);
 
         // Clear the query parameters from URL so they don't trigger again on reload
@@ -150,6 +159,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
     setDraftSupplies([]);
     setSelectedSupplyId("");
     setSelectedSupplyQty(1);
+    setSelectTeeth(false);
     setIsModalOpen(true);
   };
 
@@ -171,6 +181,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
     setDraftSupplies(loadedSupplies);
     setSelectedSupplyId("");
     setSelectedSupplyQty(1);
+    setSelectTeeth(Boolean(record.teeth && record.teeth.length > 0));
     setIsModalOpen(true);
   };
 
@@ -262,6 +273,18 @@ export function ClinicalRecordTab({ patientId }: Props) {
       }
       return s;
     }));
+  };
+
+  const toggleTooth = (tooth: string) => {
+    setDraft((current) => {
+      const teeth = current.teeth || [];
+      return {
+        ...current,
+        teeth: teeth.includes(tooth)
+          ? teeth.filter((item) => item !== tooth)
+          : [...teeth, tooth],
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -370,12 +393,9 @@ export function ClinicalRecordTab({ patientId }: Props) {
             <Stethoscope className="h-5 w-5 text-gold" />
             Ficha Clínica / Evolução
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Registre os atendimentos e acompanhe custos de insumos na timeline.
-          </p>
         </div>
         <Button className="bg-[#C9A227] hover:bg-[#b59122] text-white font-semibold" onClick={openNewRecordModal}>
-          <Plus className="h-4 w-4 mr-2" /> Nova Evolução
+          <Plus className="h-4 w-4 mr-2" /> Novo registro
         </Button>
       </div>
 
@@ -411,9 +431,6 @@ export function ClinicalRecordTab({ patientId }: Props) {
             <div className="text-center py-12">
               <Package className="h-12 w-12 text-gold opacity-50 mx-auto mb-4" />
               <h3 className="font-semibold mb-2">Nenhum evento do odontograma</h3>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                As marcações feitas no odontograma do paciente aparecerão listadas aqui para rastreabilidade.
-              </p>
             </div>
           </Card>
         ) : (
@@ -456,6 +473,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
                         setSelectedSupplyId("");
                         setSelectedSupplyQty(1);
                         setSubTab('evolutions');
+                        setSelectTeeth(true);
                         setIsModalOpen(true);
                       }}
                     >
@@ -473,9 +491,6 @@ export function ClinicalRecordTab({ patientId }: Props) {
             <div className="text-center py-12">
               <Stethoscope className="h-12 w-12 text-gold opacity-50 mx-auto mb-4" />
               <h3 className="font-semibold mb-2">Nenhuma evolução registrada</h3>
-              <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
-                O histórico clínico do paciente aparecerá aqui em formato de linha do tempo.
-              </p>
               <Button variant="outline" className="bg-white border border-[#C9A227] text-[#C9A227] hover:bg-[#faf9f5] font-semibold" onClick={openNewRecordModal}>Registrar atendimento</Button>
             </div>
           </Card>
@@ -575,44 +590,75 @@ export function ClinicalRecordTab({ patientId }: Props) {
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{draft.id ? "Editar Evolução Clínica" : "Nova Evolução Clínica"}</DialogTitle>
+            <DialogTitle>{draft.id ? "Editar registro clínico" : "Novo registro clínico"}</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-6 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[170px_minmax(0,1fr)_190px]">
               <div>
-                <Label>Data do Atendimento *</Label>
-                <Input 
-                  type="date" 
-                  value={draft.recordDate || ""} 
+                <Label>Data</Label>
+                <Input
+                  type="date"
+                  value={draft.recordDate || ""}
                   onChange={e => setDraft({...draft, recordDate: e.target.value})}
                 />
               </div>
+
               <div>
-                <Label>Procedimento Realizado</Label>
-                <Select 
-                  value={draft.procedureId || ""} 
+                <Label>Procedimento</Label>
+                <Select
+                  value={draft.procedureId || ""}
                   onChange={e => handleProcedureSelect(e.target.value)}
                 >
-                  <option value="">Selecione um procedimento...</option>
+                  <option value="">Selecione...</option>
                   {procedures.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </Select>
               </div>
+
+              <div>
+                <Label>Dentes</Label>
+                <label className="flex h-10 cursor-pointer items-center justify-between rounded-md border border-input bg-background px-3">
+                  <span className="text-sm font-medium">
+                    {selectTeeth ? `${(draft.teeth || []).length} selecionado(s)` : "Sem seleção"}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={selectTeeth}
+                    onChange={e => {
+                      setSelectTeeth(e.target.checked);
+                      if (!e.target.checked) {
+                        setDraft(current => ({ ...current, teeth: [] }));
+                      }
+                    }}
+                    className="h-5 w-5 accent-[#C9A227]"
+                  />
+                </label>
+              </div>
             </div>
 
-            <div>
-              <Label>Dentes / Regiões envolvidas</Label>
-              <Input 
-                value={(draft.teeth || []).join(", ")} 
-                onChange={e => {
-                  const arr = e.target.value.split(",").map(t => t.trim()).filter(Boolean);
-                  setDraft({...draft, teeth: arr});
-                }}
-                placeholder="Ex: 18, 21, Superior Direito..."
-              />
-            </div>
+            {selectTeeth && (
+              <div className="grid grid-cols-8 gap-2 rounded-xl border border-border bg-secondary/20 p-3">
+                {TOOTH_NUMBERS.map(tooth => {
+                  const selected = (draft.teeth || []).includes(tooth);
+                  return (
+                    <button
+                      key={tooth}
+                      type="button"
+                      onClick={() => toggleTooth(tooth)}
+                      className={`h-9 rounded-lg border text-sm font-semibold transition ${
+                        selected
+                          ? "border-[#C9A227] bg-[#fff7dc] text-[#8A6A16]"
+                          : "border-border bg-white text-foreground hover:border-[#C9A227]/60"
+                      }`}
+                    >
+                      {tooth}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <div>
               <Label>Descrição Clínica</Label>
@@ -629,9 +675,6 @@ export function ClinicalRecordTab({ patientId }: Props) {
                 <h4 className="font-semibold flex items-center gap-2 mb-1">
                   <Package className="w-4 h-4" /> Insumos Utilizados
                 </h4>
-                <p className="text-xs text-muted-foreground">
-                  Adicione insumos para calcular o custo real. Baixa automática de estoque será configurada em etapa futura.
-                </p>
               </div>
               
               <div className="space-y-2">
@@ -761,7 +804,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
           
           <DialogFooter>
             <Button type="button" variant="outline" className="bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 font-semibold" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-            <Button type="button" className="bg-[#C9A227] hover:bg-[#b59122] text-white font-semibold" onClick={handleSave}>Salvar Evolução</Button>
+            <Button type="button" className="bg-[#C9A227] hover:bg-[#b59122] text-white font-semibold" onClick={handleSave}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
