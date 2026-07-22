@@ -71,7 +71,7 @@ export function FinanceTab({ patientId }: { patientId: string }) {
     window.location.href = `/whatsapp?${params.toString()}`;
   };
 
-  const [subTab, setSubTab] = useState<SubTab>("resumo");
+  const [subTab, setSubTab] = useState<SubTab>("realizados");
 
   // Novo Orçamento options modals
   const [isBudgetOptionModalOpen, setIsBudgetOptionModalOpen] = useState(false);
@@ -186,7 +186,6 @@ export function FinanceTab({ patientId }: { patientId: string }) {
   }
 
   const SUB_TABS: { key: SubTab; label: string }[] = [
-    { key: "resumo", label: "Resumo" },
     { key: "realizados", label: "Procedimentos realizados" },
     { key: "orcamentos", label: "Orçamentos" },
     { key: "parcelas", label: "Parcelas" },
