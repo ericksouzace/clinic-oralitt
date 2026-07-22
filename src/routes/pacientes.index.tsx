@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { Search, Plus, Trash2, Edit3, Eye, Calendar, Phone, Users } from "lucide-react";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
-import { PageHeader, Card, Button, Input, Label, Select, Badge } from "@/components/ui-bits";
+import { PageHeader, Card, Button, Input, Label, Select } from "@/components/ui-bits";
 import { usePatients } from "@/lib/db";
 import { Patient, PatientStatus, PATIENT_STATUS, PATIENT_GENDERS, PATIENT_MARITAL_STATUSES } from "@/lib/store";
 
@@ -35,6 +35,47 @@ function calcAge(birthDate: string | undefined): number | null {
   const m = today.getMonth() - birth.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
   return age;
+}
+
+const STATUS_META: Record<PatientStatus, {
+  label: string;
+  dot: string;
+  border: string;
+  badge: string;
+  selected: string;
+}> = {
+  inativo: {
+    label: "Inativo",
+    dot: "bg-slate-400",
+    border: "bg-slate-400",
+    badge: "border-slate-200 bg-slate-100 text-slate-700",
+    selected: "border-slate-400 bg-slate-50 text-slate-900",
+  },
+  "em tratamento": {
+    label: "Em Tratamento",
+    dot: "bg-emerald-500",
+    border: "bg-emerald-500",
+    badge: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    selected: "border-emerald-400 bg-emerald-50 text-emerald-800",
+  },
+  "em acompanhamento": {
+    label: "Em Acompanhamento",
+    dot: "bg-amber-500",
+    border: "bg-amber-500",
+    badge: "border-amber-200 bg-amber-50 text-amber-800",
+    selected: "border-amber-400 bg-amber-50 text-amber-900",
+  },
+  "marcar c/ parceiros": {
+    label: "Marcar c/ Parceiros",
+    dot: "bg-violet-500",
+    border: "bg-violet-500",
+    badge: "border-violet-200 bg-violet-50 text-violet-700",
+    selected: "border-violet-400 bg-violet-50 text-violet-800",
+  },
+};
+
+function getStatusLabel(status: PatientStatus) {
+  return STATUS_META[status]?.label || status;
 }
 
 const emptyPatient = (): Patient => ({
@@ -253,7 +294,7 @@ function PacientesPage() {
                   <div>
                     <Label>Status do Paciente *</Label>
                     <Select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as PatientStatus })}>
-                      {PATIENT_STATUS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                      {PATIENT_STATUS.map(s => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
                     </Select>
                   </div>
                   <div className="sm:col-span-2">
@@ -303,43 +344,40 @@ function PacientesPage() {
                 <option value="todos">Todos os status</option>
                 {PATIENT_STATUS.map((s) => (
                   <option key={s} value={s}>
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                    {getStatusLabel(s)}
                   </option>
                 ))}
               </Select>
             </div>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("em tratamento")}
-              className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                statusFilter === "em tratamento"
-                  ? "border-gold bg-gold/10 text-gold"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              Pacientes em Tratamento
-              <span className="mt-1 block text-xs font-normal">
-                Tratamento não completo, com procedimentos ainda a realizar.
-              </span>
-            </button>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {PATIENT_STATUS.map((status) => {
+              const meta = STATUS_META[status];
+              const count = patients.filter((patient) => patient.status === status).length;
+              const selected = statusFilter === status;
 
-            <button
-              type="button"
-              onClick={() => setStatusFilter("em acompanhamento")}
-              className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                statusFilter === "em acompanhamento"
-                  ? "border-gold bg-gold/10 text-gold"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              Pacientes em Acompanhamento
-              <span className="mt-1 block text-xs font-normal">
-                Tratamento principal encerrado, mas paciente segue acompanhado.
-              </span>
-            </button>
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setStatusFilter(status)}
+                  className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                    selected
+                      ? meta.selected
+                      : "border-border bg-white text-foreground hover:border-gold/40 hover:bg-[#fcfbf8]"
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
+                    <span className="truncate text-sm font-semibold">{meta.label}</span>
+                  </span>
+                  <span className="ml-3 rounded-full border border-current/10 bg-white/70 px-2 py-0.5 text-xs font-bold">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </div>
       </Card>
@@ -350,11 +388,11 @@ function PacientesPage() {
           return (
             <Card key={p.id} className="flex flex-col relative overflow-hidden group">
               {/* Colored left border based on status */}
-              <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                p.status === "em tratamento" ? "bg-emerald-500" :
-                p.status === "em acompanhamento" ? "bg-amber-500" :
-                "bg-muted-foreground/30"
-              }`} />
+              <div
+                className={`absolute bottom-0 left-0 top-0 w-1 ${
+                  STATUS_META[p.status]?.border || "bg-muted-foreground/30"
+                }`}
+              />
               
               <div className="pl-3 pb-3">
                 <div className="flex justify-between items-start mb-2">
@@ -365,12 +403,13 @@ function PacientesPage() {
                       {age !== null && <span className="text-xs text-muted-foreground">{age} anos</span>}
                     </div>
                   </div>
-                  <Badge variant={
-                    p.status === "em tratamento" ? "success" : 
-                    p.status === "em acompanhamento" ? "warning" : "secondary"
-                  } className="capitalize shrink-0">
-                    {p.status}
-                  </Badge>
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                      STATUS_META[p.status]?.badge || "border-border bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {getStatusLabel(p.status)}
+                  </span>
                 </div>
 
                 <div className="text-sm text-muted-foreground space-y-1.5 mt-4">
