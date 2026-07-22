@@ -15,7 +15,7 @@ import { seedSupplies } from "@/lib/seed";
 import { Plus, Trash2, Pencil, Search, Download, X, Sparkles, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/insumos")({
-  head: () => ({ meta: [{ title: "Insumos — Oralit" }] }),
+  head: () => ({ meta: [{ title: "Estoque — Oralit" }] }),
   component: InsumosPage,
 });
 
@@ -122,7 +122,7 @@ function InsumosPage() {
     ).join("\n");
     const blob = new Blob([header + body], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "oralit-insumos.csv"; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = "oralit-estoque.csv"; a.click();
     URL.revokeObjectURL(url);
   }
   function loadExamples() {
@@ -134,8 +134,8 @@ function InsumosPage() {
   return (
     <AppLayout>
       <PageHeader
-        title="Insumos"
-        subtitle="Cadastre materiais uma vez e reutilize nos procedimentos."
+        title="Estoque"
+        subtitle="Gerencie materiais, quantidades e movimentações da clínica."
         action={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={exportCsv} disabled={!supplies.length}>
