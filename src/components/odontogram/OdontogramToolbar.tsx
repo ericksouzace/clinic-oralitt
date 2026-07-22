@@ -12,9 +12,14 @@ import {
 } from "@/components/ui/dialog";
 import { TOOTH_REGIONS } from "@/lib/store";
 import {
+  CANAL_COMPLEMENT_OPTIONS,
   FIXED_ODONTOGRAM_STATUS,
+  RESERVED_ODONTOGRAM_STATUS,
+  type CanalComplement,
   getFixedStatusColor,
   getStatusDisplayName,
+  isRootOnlyStatus,
+  isStandaloneMarkerStatus,
   normalizeOdontogramStatus,
 } from "./odontogramStatusConfig";
 import { useOdontogramCustomTypes } from "./useOdontogramCustomTypes";
@@ -24,6 +29,8 @@ interface Props {
   setBrushStatus: (status: string) => void;
   brushRegion: string;
   setBrushRegion: (region: string) => void;
+  canalComplement: CanalComplement;
+  setCanalComplement: (complement: CanalComplement) => void;
 }
 
 type DeleteTarget = {
@@ -36,6 +43,8 @@ export function OdontogramToolbar({
   setBrushStatus,
   brushRegion,
   setBrushRegion,
+  canalComplement,
+  setCanalComplement,
 }: Props) {
   const { types: customTypes, addType, deleteType, loading } =
     useOdontogramCustomTypes();
@@ -46,12 +55,14 @@ export function OdontogramToolbar({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
-  const fixedStatusNames = new Set(
-    FIXED_ODONTOGRAM_STATUS.map((status) => normalizeOdontogramStatus(status)),
+  const reservedStatusNames = new Set(
+    RESERVED_ODONTOGRAM_STATUS.map((status) =>
+      normalizeOdontogramStatus(status),
+    ),
   );
 
   const visibleCustomTypes = customTypes.filter(
-    (type) => !fixedStatusNames.has(normalizeOdontogramStatus(type.name)),
+    (type) => !reservedStatusNames.has(normalizeOdontogramStatus(type.name)),
   );
 
   const getStatusColor = (status: string) => {
@@ -67,18 +78,28 @@ export function OdontogramToolbar({
     );
   };
 
+  const selectStatus = (status: string) => {
+    setBrushStatus(status);
+    if (!isRootOnlyStatus(status)) {
+      setCanalComplement("none");
+    }
+  };
+
   const handleAddCustom = async () => {
     const name = customName.trim();
     if (!name || isSaving) return;
 
-    if (fixedStatusNames.has(normalizeOdontogramStatus(name))) {
-      toast.error(`“${getStatusDisplayName(name)}” já é uma situação fixa do odontograma.`);
+    if (reservedStatusNames.has(normalizeOdontogramStatus(name))) {
+      toast.error(
+        `“${getStatusDisplayName(name)}” é uma situação reservada do odontograma.`,
+      );
       return;
     }
 
     const alreadyExists = customTypes.some(
       (type) =>
-        normalizeOdontogramStatus(type.name) === normalizeOdontogramStatus(name),
+        normalizeOdontogramStatus(type.name) ===
+        normalizeOdontogramStatus(name),
     );
 
     if (alreadyExists) {
@@ -90,11 +111,14 @@ export function OdontogramToolbar({
       setIsSaving(true);
       const newType = await addType(name, customColor);
       setBrushStatus(newType.name);
+      setCanalComplement("none");
       setCustomName("");
       setCustomColor("#7B61FF");
       toast.success(`Situação "${newType.name}" adicionada.`);
     } catch (error: any) {
-      toast.error(error?.message || "Não foi possível salvar a situação clínica.");
+      toast.error(
+        error?.message || "Não foi possível salvar a situação clínica.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -112,6 +136,7 @@ export function OdontogramToolbar({
         normalizeOdontogramStatus(deleteTarget.name)
       ) {
         setBrushStatus(FIXED_ODONTOGRAM_STATUS[0]);
+        setCanalComplement("none");
       }
 
       toast.success(`Situação "${deleteTarget.name}" excluída.`);
@@ -122,6 +147,9 @@ export function OdontogramToolbar({
       setDeletingId(null);
     }
   };
+
+  const canalSelected = isRootOnlyStatus(brushStatus);
+  const markerOnlySelected = isStandaloneMarkerStatus(brushStatus);
 
   return (
     <>
@@ -142,17 +170,17 @@ export function OdontogramToolbar({
                 <button
                   key={status}
                   type="button"
-                  onClick={() => setBrushStatus(status)}
-                  className={`relative flex h-8 w-full items-center gap-2.5 overflow-hidden rounded-lg px-2 pl-3 text-left text-[13px] transition-all ${
+                  onClick={() => selectStatus(status)}
+                  className={`relative flex min-h-9 w-full items-center gap-2.5 overflow-hidden rounded-lg border px-3 py-2 text-left text-[13px] transition-all ${
                     selected
-                      ? "bg-[#fff8e7] font-semibold text-slate-950 ring-1 ring-inset ring-[#d4af37]/45 shadow-[0_1px_2px_rgba(212,175,55,0.10)]"
-                      : "text-slate-700 hover:bg-slate-50"
+                      ? "border-[#c89b2b] bg-[#fff4cc] font-bold text-slate-950 shadow-[0_2px_8px_rgba(200,155,43,0.22)] ring-1 ring-inset ring-[#d4af37]/70"
+                      : "border-transparent text-slate-700 hover:bg-slate-50"
                   }`}
                 >
                   {selected && (
                     <span
                       aria-hidden="true"
-                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#d4af37]"
+                      className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#c89b2b]"
                     />
                   )}
                   <span
@@ -172,24 +200,24 @@ export function OdontogramToolbar({
               return (
                 <div
                   key={type.id}
-                  className={`group relative flex h-8 items-center overflow-hidden rounded-lg transition-all ${
+                  className={`group relative flex min-h-9 items-center overflow-hidden rounded-lg border transition-all ${
                     selected
-                      ? "bg-[#fff8e7] ring-1 ring-inset ring-[#d4af37]/45 shadow-[0_1px_2px_rgba(212,175,55,0.10)]"
-                      : "hover:bg-slate-50"
+                      ? "border-[#c89b2b] bg-[#fff4cc] shadow-[0_2px_8px_rgba(200,155,43,0.22)] ring-1 ring-inset ring-[#d4af37]/70"
+                      : "border-transparent hover:bg-slate-50"
                   }`}
                 >
                   {selected && (
                     <span
                       aria-hidden="true"
-                      className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-[#d4af37]"
+                      className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-[#c89b2b]"
                     />
                   )}
 
                   <button
                     type="button"
-                    onClick={() => setBrushStatus(type.name)}
-                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-2 pl-3 text-left text-[13px] ${
-                      selected ? "font-semibold text-slate-950" : "text-slate-700"
+                    onClick={() => selectStatus(type.name)}
+                    className={`flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left text-[13px] ${
+                      selected ? "font-bold text-slate-950" : "text-slate-700"
                     }`}
                   >
                     <span
@@ -215,6 +243,50 @@ export function OdontogramToolbar({
             })}
           </div>
 
+          {canalSelected && (
+            <div className="mt-4 rounded-xl border border-[#e5d7a9] bg-[#fffbef] p-3.5">
+              <div className="mb-1 text-[12px] font-bold text-slate-900">
+                Complemento do canal
+              </div>
+              <p className="mb-3 text-[11px] leading-relaxed text-slate-600">
+                Opcional. O canal pode ficar sozinho ou receber PFV ou Núcleo
+                Metálico.
+              </p>
+
+              <div className="flex flex-col gap-2">
+                {CANAL_COMPLEMENT_OPTIONS.map((option) => {
+                  const selected = canalComplement === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setCanalComplement(option.value)}
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[12px] transition ${
+                        selected
+                          ? "border-[#c89b2b] bg-white font-semibold text-slate-950 shadow-sm"
+                          : "border-[#e8e3da] bg-white/70 text-slate-600 hover:border-[#d8c58a]"
+                      }`}
+                    >
+                      <span
+                        className={`grid h-4 w-4 place-items-center rounded-full border ${
+                          selected
+                            ? "border-[#c89b2b]"
+                            : "border-slate-300"
+                        }`}
+                      >
+                        {selected && (
+                          <span className="h-2 w-2 rounded-full bg-[#c89b2b]" />
+                        )}
+                      </span>
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => {
@@ -230,18 +302,32 @@ export function OdontogramToolbar({
         </div>
 
         <div className="mb-5">
-          <Label>Região do Dente</Label>
-          <Select
-            value={brushRegion}
-            onChange={(event) => setBrushRegion(event.target.value)}
-            className="h-11 rounded-xl bg-white"
-          >
-            {TOOTH_REGIONS.map((region) => (
-              <option key={region} value={region} className="capitalize">
-                {region === "inteiro" ? "Inteiro" : region}
-              </option>
-            ))}
-          </Select>
+          {canalSelected ? (
+            <div className="rounded-xl border border-violet-100 bg-violet-50/70 p-3 text-[12px] leading-relaxed text-violet-800">
+              <strong>Canal:</strong> ao clicar no dente, a marcação será aplicada
+              automaticamente apenas na raiz.
+            </div>
+          ) : markerOnlySelected ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-700">
+              <strong>{getStatusDisplayName(brushStatus)}:</strong> não pinta o
+              dente. Será exibida apenas a letra correspondente acima dele.
+            </div>
+          ) : (
+            <>
+              <Label>Região do Dente</Label>
+              <Select
+                value={brushRegion}
+                onChange={(event) => setBrushRegion(event.target.value)}
+                className="h-11 rounded-xl bg-white"
+              >
+                {TOOTH_REGIONS.map((region) => (
+                  <option key={region} value={region} className="capitalize">
+                    {region === "inteiro" ? "Inteiro" : region}
+                  </option>
+                ))}
+              </Select>
+            </>
+          )}
         </div>
 
         <div className="rounded-xl border border-[#e8e3da] bg-[#fcfbf8] p-3.5">
@@ -306,9 +392,9 @@ export function OdontogramToolbar({
             <DialogHeader>
               <DialogTitle>Excluir situação clínica?</DialogTitle>
               <DialogDescription className="pt-2 leading-relaxed">
-                A situação personalizada <strong>“{deleteTarget?.name}”</strong> será
-                removida da lista. As marcações já registradas nos pacientes serão
-                preservadas.
+                A situação personalizada <strong>“{deleteTarget?.name}”</strong>{" "}
+                será removida da lista. As marcações já registradas nos pacientes
+                serão preservadas.
               </DialogDescription>
             </DialogHeader>
           </div>

@@ -2,6 +2,7 @@ import React from "react";
 import type { OdontogramEntry } from "@/lib/store";
 import {
   getSpecialToothMarker,
+  isCanalComplementStatus,
   isRootOnlyStatus,
   isSpecialMarkerStatus,
   normalizeOdontogramStatus,
@@ -26,6 +27,9 @@ interface Props {
   onRegionClick: (toothNumber: string, region: string) => void;
 }
 
+// Regra visual aprovada:
+// - molares e pré-molares usam desenho de raiz dupla;
+// - caninos e incisivos usam desenho de raiz única.
 const ROOT_PATHS: Record<ReturnType<typeof getToothType>, string> = {
   molar:
     "M14 58 C14 69 15 77 17 87 L20 108 C20.7 113 25.8 113 27 108 L31 84 C31.5 81 33 80 34 84 L38 108 C39 113 44 113 45 108 L48 87 C50 77 50.8 69 50 58 Z",
@@ -53,6 +57,15 @@ function latestEntry(entries: OdontogramEntry[], region: string) {
   )[0];
 }
 
+function latestPaintEntry(entries: OdontogramEntry[], region: string) {
+  return sortNewestFirst(
+    entries.filter(
+      (entry) =>
+        entry.toothRegion === region && !isSpecialMarkerStatus(entry.status),
+    ),
+  )[0];
+}
+
 function latestEntryByStatus(entries: OdontogramEntry[], status: string) {
   const normalizedStatus = normalizeOdontogramStatus(status);
 
@@ -63,17 +76,29 @@ function latestEntryByStatus(entries: OdontogramEntry[], status: string) {
   )[0];
 }
 
-function latestSpecialMarkerEntries(entries: OdontogramEntry[]) {
+function latestSpecialMarkerEntries(
+  entries: OdontogramEntry[],
+  hasCanal: boolean,
+) {
   const newest = sortNewestFirst(
-    entries.filter((entry) => isSpecialMarkerStatus(entry.status)),
+    entries.filter((entry) => {
+      if (!isSpecialMarkerStatus(entry.status)) return false;
+      if (isCanalComplementStatus(entry.status)) return hasCanal;
+      return true;
+    }),
   );
 
   const seen = new Set<string>();
 
   return newest.filter((entry) => {
-    const normalized = normalizeOdontogramStatus(entry.status);
-    if (seen.has(normalized)) return false;
-    seen.add(normalized);
+    const marker = getSpecialToothMarker(entry.status);
+    if (!marker) return false;
+
+    // PFV antigo (Pino de Vidro) e o novo Pino de Fibra de Vidro
+    // representam o mesmo marcador visual.
+    const key = marker;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
@@ -102,25 +127,32 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
     ? isRootOnlyStatus(wholeEntry.status)
     : false;
 
+  const wholeEntryIsVisualMarker = wholeEntry
+    ? isSpecialMarkerStatus(wholeEntry.status)
+    : false;
+
   const wholePaint =
     wholeEntry &&
     !isExtracted &&
     !isExtractionIndicated &&
-    !wholeEntryIsRootOnly
+    !wholeEntryIsRootOnly &&
+    !wholeEntryIsVisualMarker
       ? wholeEntry.color
       : undefined;
 
   const canalEntry = latestEntryByStatus(toothEntries, "canal");
-
-  const markerEntries = latestSpecialMarkerEntries(toothEntries);
+  const markerEntries = latestSpecialMarkerEntries(
+    toothEntries,
+    Boolean(canalEntry),
+  );
 
   const regionColor = (region: string) => {
     if (wholePaint) return wholePaint;
-    return latestEntry(toothEntries, region)?.color || EMPTY_FILL;
+    return latestPaintEntry(toothEntries, region)?.color || EMPTY_FILL;
   };
 
   const rootColor =
-    latestEntry(toothEntries, "raiz/base")?.color ||
+    latestPaintEntry(toothEntries, "raiz/base")?.color ||
     wholePaint ||
     canalEntry?.color ||
     EMPTY_FILL;
@@ -128,14 +160,24 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
   const crownY = upper ? 78 : 40;
   const rootTransform = upper ? "translate(0 118) scale(1 -1)" : undefined;
 
-  const top = crownY - 22;
-  const bottom = crownY + 22;
-  const left = 10;
-  const right = 54;
-  const innerTop = crownY - 8;
-  const innerBottom = crownY + 8;
-  const innerLeft = 24;
-  const innerRight = 40;
+  // Coroa no padrão visual aprovado pelo usuário:
+  // ovalada, círculo central e linhas inclinadas/diagonais,
+  // sem a cruz reta vertical + horizontal do modelo anterior.
+  const crownRx = 24;
+  const crownRy = 18;
+  const diagonalX = crownRx / Math.sqrt(2);
+  const diagonalY = crownRy / Math.sqrt(2);
+  const innerDiagonal = 8 / Math.sqrt(2);
+
+  const outerNW = { x: 32 - diagonalX, y: crownY - diagonalY };
+  const outerNE = { x: 32 + diagonalX, y: crownY - diagonalY };
+  const outerSE = { x: 32 + diagonalX, y: crownY + diagonalY };
+  const outerSW = { x: 32 - diagonalX, y: crownY + diagonalY };
+
+  const innerNW = { x: 32 - innerDiagonal, y: crownY - innerDiagonal };
+  const innerNE = { x: 32 + innerDiagonal, y: crownY - innerDiagonal };
+  const innerSE = { x: 32 + innerDiagonal, y: crownY + innerDiagonal };
+  const innerSW = { x: 32 - innerDiagonal, y: crownY + innerDiagonal };
 
   const sectorClass =
     "cursor-pointer transition-[filter,opacity] duration-150 hover:brightness-95 active:opacity-80";
@@ -188,7 +230,7 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
         />
 
         <path
-          d={`M32 ${top} A22 22 0 0 0 ${left} ${crownY} L${innerLeft} ${crownY} A8 8 0 0 1 32 ${innerTop} Z`}
+          d={`M${outerNW.x} ${outerNW.y} A${crownRx} ${crownRy} 0 0 1 ${outerNE.x} ${outerNE.y} L${innerNE.x} ${innerNE.y} A8 8 0 0 0 ${innerNW.x} ${innerNW.y} Z`}
           fill={regionColor("superior esquerdo")}
           stroke={STROKE}
           strokeWidth="1.8"
@@ -198,7 +240,7 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
         />
 
         <path
-          d={`M32 ${top} A22 22 0 0 1 ${right} ${crownY} L${innerRight} ${crownY} A8 8 0 0 0 32 ${innerTop} Z`}
+          d={`M${outerNE.x} ${outerNE.y} A${crownRx} ${crownRy} 0 0 1 ${outerSE.x} ${outerSE.y} L${innerSE.x} ${innerSE.y} A8 8 0 0 0 ${innerNE.x} ${innerNE.y} Z`}
           fill={regionColor("superior direito")}
           stroke={STROKE}
           strokeWidth="1.8"
@@ -208,7 +250,7 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
         />
 
         <path
-          d={`M${right} ${crownY} A22 22 0 0 1 32 ${bottom} L32 ${innerBottom} A8 8 0 0 0 ${innerRight} ${crownY} Z`}
+          d={`M${outerSE.x} ${outerSE.y} A${crownRx} ${crownRy} 0 0 1 ${outerSW.x} ${outerSW.y} L${innerSW.x} ${innerSW.y} A8 8 0 0 0 ${innerSE.x} ${innerSE.y} Z`}
           fill={regionColor("inferior direito")}
           stroke={STROKE}
           strokeWidth="1.8"
@@ -218,7 +260,7 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
         />
 
         <path
-          d={`M32 ${bottom} A22 22 0 0 1 ${left} ${crownY} L${innerLeft} ${crownY} A8 8 0 0 0 32 ${innerBottom} Z`}
+          d={`M${outerSW.x} ${outerSW.y} A${crownRx} ${crownRy} 0 0 1 ${outerNW.x} ${outerNW.y} L${innerNW.x} ${innerNW.y} A8 8 0 0 0 ${innerSW.x} ${innerSW.y} Z`}
           fill={regionColor("inferior esquerdo")}
           stroke={STROKE}
           strokeWidth="1.8"
