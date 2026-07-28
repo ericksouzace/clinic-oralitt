@@ -2794,18 +2794,10 @@ export async function deletePayment(payment: Payment) {
 // Appointments / Agenda
 // ---------------------------------------------------------------------------
 
-export function useAppointments(
-  patientId?: string,
-): [Appointment[], boolean, boolean, () => void] {
+export function useAppointments(patientId?: string): [Appointment[], boolean, boolean] {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [tablesMissing, setTablesMissing] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  const refetch = useCallback(
-    () => setRefreshTrigger((current) => current + 1),
-    [],
-  );
 
   useEffect(() => {
     let active = true;
@@ -2844,7 +2836,6 @@ export function useAppointments(
         }
 
         if (active && data) {
-          setTablesMissing(false);
           setAppointments(
             data.map((d: any) => ({
               id: d.id,
@@ -2884,9 +2875,9 @@ export function useAppointments(
     return () => {
       active = false;
     };
-  }, [patientId, refreshTrigger]);
+  }, [patientId]);
 
-  return [appointments, loading, tablesMissing, refetch];
+  return [appointments, loading, tablesMissing];
 }
 
 export async function saveAppointment(app: Appointment) {

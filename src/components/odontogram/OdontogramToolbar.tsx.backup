@@ -313,9 +313,20 @@ export function OdontogramToolbar({
               dente. Será exibida apenas a letra correspondente acima dele.
             </div>
           ) : (
-            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3 text-[12px] leading-relaxed text-amber-900">
-              Clique no dente e escolha a região na janela que será aberta.
-            </div>
+            <>
+              <Label>Região do Dente</Label>
+              <Select
+                value={brushRegion}
+                onChange={(event) => setBrushRegion(event.target.value)}
+                className="h-11 rounded-xl bg-white"
+              >
+                {TOOTH_REGIONS.map((region) => (
+                  <option key={region} value={region} className="capitalize">
+                    {region === "inteiro" ? "Inteiro" : region}
+                  </option>
+                ))}
+              </Select>
+            </>
           )}
         </div>
 

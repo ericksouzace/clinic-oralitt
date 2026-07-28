@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarPlus, CheckCircle2, Edit3, FileDown, Plus, Printer, Trash2 } from "lucide-react";
+import { CheckCircle2, Edit3, FileDown, Plus, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Input, Label, Select } from "@/components/ui-bits";
 import {
@@ -12,20 +12,13 @@ import {
 import {
   deleteClinicalRecord,
   deleteTreatmentPlanItem,
-  saveAppointment,
   saveTreatmentPlanItem,
   uploadPatientFile,
   usePatients,
   useProcedures,
   useTreatmentPlans,
 } from "@/lib/db";
-import {
-  PATIENT_STATUS,
-  type Appointment,
-  type PatientStatus,
-  type TreatmentPlanItem,
-  uid,
-} from "@/lib/store";
+import { PATIENT_STATUS, type PatientStatus, type TreatmentPlanItem, uid } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -121,15 +114,6 @@ export function TreatmentPlanTab({ patientId }: Props) {
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, ItemStatus>>({});
   const [documentBusy, setDocumentBusy] = useState<"preview" | "save" | null>(null);
-
-  const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
-  const [appointmentItem, setAppointmentItem] =
-    useState<TreatmentPlanItem | null>(null);
-  const [appointmentDate, setAppointmentDate] = useState("");
-  const [appointmentStartTime, setAppointmentStartTime] = useState("09:00");
-  const [appointmentEndTime, setAppointmentEndTime] = useState("10:00");
-  const [appointmentReason, setAppointmentReason] = useState("");
-  const [savingAppointment, setSavingAppointment] = useState(false);
 
   const allItems = useMemo(
     () =>
@@ -449,66 +433,6 @@ export function TreatmentPlanTab({ patientId }: Props) {
     }
   };
 
-  const openAppointmentModal = (item: TreatmentPlanItem) => {
-    setAppointmentItem(item);
-    setAppointmentDate(new Date().toISOString().split("T")[0]);
-    setAppointmentStartTime("09:00");
-    setAppointmentEndTime("10:00");
-    setAppointmentReason("");
-    setIsAppointmentModalOpen(true);
-  };
-
-  const handleCreateAppointment = async () => {
-    if (!appointmentItem || savingAppointment) return;
-
-    if (!appointmentDate || !appointmentStartTime || !appointmentEndTime) {
-      toast.error("Informe a data e os horários do agendamento.");
-      return;
-    }
-
-    if (appointmentStartTime >= appointmentEndTime) {
-      toast.error("O horário final precisa ser posterior ao horário inicial.");
-      return;
-    }
-
-    try {
-      setSavingAppointment(true);
-
-      const now = new Date().toISOString();
-
-      const appointment: Appointment = {
-        id: `temp-${uid()}`,
-        userId: "",
-        patientId,
-        procedureId: appointmentItem.procedureId,
-        treatmentPlanId: appointmentItem.treatmentPlanId,
-        title: getItemLabel(appointmentItem, procedures),
-        appointmentDate,
-        startTime: appointmentStartTime,
-        endTime: appointmentEndTime,
-        status: "agendado",
-        type: "consulta",
-        notes: appointmentReason.trim() || undefined,
-        whatsappReminder: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await saveAppointment(appointment);
-
-      toast.success("Agendamento criado para este procedimento.");
-      setIsAppointmentModalOpen(false);
-      setAppointmentItem(null);
-    } catch (appointmentError: any) {
-      toast.error(
-        appointmentError?.message ||
-          "Não foi possível criar o agendamento.",
-      );
-    } finally {
-      setSavingAppointment(false);
-    }
-  };
-
   const handlePatientStatusChange = async (nextStatus: PatientStatus) => {
     if (!patient || statusBusy || nextStatus === patientStatus) return;
     const previous = patientStatus;
@@ -728,17 +652,6 @@ export function TreatmentPlanTab({ patientId }: Props) {
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-[#8A6A16] hover:bg-amber-50 hover:text-[#6f5310]"
-                              onClick={() => openAppointmentModal(item)}
-                              disabled={busy}
-                              title="Criar agendamento"
-                            >
-                              <CalendarPlus className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
                               className="h-8 w-8 p-0"
                               onClick={() => openEditItemModal(item)}
                               disabled={busy}
@@ -872,112 +785,6 @@ export function TreatmentPlanTab({ patientId }: Props) {
           </Card>
         </div>
       )}
-
-      <Dialog
-        open={isAppointmentModalOpen}
-        onOpenChange={(open) => {
-          setIsAppointmentModalOpen(open);
-          if (!open) setAppointmentItem(null);
-        }}
-      >
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Criar agendamento</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-5 py-3">
-            <div className="rounded-xl border border-amber-100 bg-amber-50/70 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-[#8A6A16]">
-                Procedimento
-              </div>
-              <div className="mt-1 text-sm font-semibold text-foreground">
-                {appointmentItem
-                  ? getItemLabel(appointmentItem, procedures)
-                  : "Procedimento"}
-              </div>
-
-              {appointmentItem?.toothNumber && (
-                <div className="mt-1 text-xs text-muted-foreground">
-                  Dentes: {appointmentItem.toothNumber}
-                </div>
-              )}
-            </div>
-
-            <div>
-              <Label>Data do agendamento</Label>
-              <Input
-                type="date"
-                value={appointmentDate}
-                onChange={(event) => setAppointmentDate(event.target.value)}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Horário inicial</Label>
-                <Input
-                  type="time"
-                  value={appointmentStartTime}
-                  onChange={(event) =>
-                    setAppointmentStartTime(event.target.value)
-                  }
-                />
-              </div>
-
-              <div>
-                <Label>Horário final</Label>
-                <Input
-                  type="time"
-                  value={appointmentEndTime}
-                  onChange={(event) =>
-                    setAppointmentEndTime(event.target.value)
-                  }
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label>Motivo do agendamento</Label>
-              <textarea
-                value={appointmentReason}
-                onChange={(event) =>
-                  setAppointmentReason(event.target.value)
-                }
-                placeholder="Ex.: retorno, continuação do tratamento, observações importantes..."
-                rows={4}
-                className="w-full resize-none rounded-xl border border-input bg-white px-3 py-2 text-sm outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/30"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={savingAppointment}
-              onClick={() => setIsAppointmentModalOpen(false)}
-            >
-              Cancelar
-            </Button>
-
-            <Button
-              type="button"
-              disabled={
-                savingAppointment ||
-                !appointmentDate ||
-                !appointmentStartTime ||
-                !appointmentEndTime
-              }
-              className="bg-[#C9A227] font-semibold text-white hover:bg-[#b59122]"
-              onClick={() => void handleCreateAppointment()}
-            >
-              {savingAppointment
-                ? "Criando agendamento..."
-                : "Marcar agendamento"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={isItemModalOpen} onOpenChange={setIsItemModalOpen}>
         <DialogContent className="max-w-2xl">

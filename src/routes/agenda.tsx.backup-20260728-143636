@@ -13,7 +13,7 @@ import {
   savePayment,
 } from "@/lib/db";
 import { supabase } from "@/integrations/supabase/client";
-import { Appointment, AppointmentStatus, uid, ClinicalRecord, ClinicalRecordSupply } from "@/lib/store";
+import { Appointment, AppointmentStatus, AppointmentType, uid, ClinicalRecord, ClinicalRecordSupply } from "@/lib/store";
 import { toast } from "sonner";
 import {
   Calendar, Plus, Search, Clock, Activity,
@@ -45,8 +45,7 @@ export function AgendaPage() {
   const router = useRouter();
 
   // ── Data ──────────────────────────────────────────────────────────────────
-  const [appointments, loading, tablesMissing, refetchAppointments] =
-    useAppointments();
+  const [appointments, loading, tablesMissing] = useAppointments();
   const [patients] = usePatients();
   const [procedures] = useProcedures();
   const [supplies] = useSupplies();
@@ -63,6 +62,7 @@ export function AgendaPage() {
   // ── Filter state ──────────────────────────────────────────────────────────
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterType, setFilterType] = useState("");
 
   // ── Modal state ───────────────────────────────────────────────────────────
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -340,7 +340,7 @@ export function AgendaPage() {
       toast.success("Atendimento concluído e integrado com sucesso!");
       setIsCompletionModalOpen(false);
       setCompletionAppt(null);
-      refetchAppointments();
+      window.location.reload();
     } catch (err: any) {
       console.error("Error finalizing completion:", err);
       toast.error("Erro ao finalizar atendimento: " + err.message);
@@ -409,13 +409,7 @@ export function AgendaPage() {
   }
 
   async function openEditAppointment(app: Appointment) {
-    setDraft({
-      ...app,
-      status: ["agendado", "confirmado", "remarcado"].includes(app.status)
-        ? app.status
-        : "agendado",
-      type: "consulta",
-    });
+    setDraft(app);
     setSelectedPatientId(app.patientId);
     await loadPlansForPatient(app.patientId);
     setIsModalOpen(true);
@@ -458,16 +452,11 @@ export function AgendaPage() {
       toast.error("Data, horário inicial e horário final são obrigatórios."); return;
     }
     if (draft.startTime >= draft.endTime) {
-      toast.error("O horário final deve ser após o horário inicial.");
-      return;
+      toast.error("O horário final deve ser após o horário inicial."); return;
     }
 
-    if (!draft.title?.trim()) {
-      toast.error("Informe o procedimento do agendamento.");
-      return;
-    }
-
-    const titleVal = draft.title.trim();
+    const patientDef = patients.find(p => p.id === selectedPatientId);
+    const titleVal = draft.title || `Atendimento - ${patientDef?.fullName || ""}`;
 
     const appointmentToSave: Appointment = {
       id: draft.id || `temp-${uid()}`,
@@ -480,7 +469,7 @@ export function AgendaPage() {
       startTime: draft.startTime,
       endTime: draft.endTime,
       status: (draft.status as AppointmentStatus) || "agendado",
-      type: "consulta",
+      type: (draft.type as AppointmentType) || "consulta",
       notes: draft.notes,
       whatsappReminder: draft.whatsappReminder ?? false,
       createdAt: draft.createdAt || new Date().toISOString(),
@@ -501,7 +490,7 @@ export function AgendaPage() {
       const [y, m] = appointmentToSave.appointmentDate.split("-");
       setViewMonth(`${y}-${m}-01`);
       setIsModalOpen(false);
-      refetchAppointments();
+      window.location.reload();
     } catch (err: any) {
       toast.error("Erro ao salvar: " + err.message);
     } finally {
@@ -521,7 +510,7 @@ export function AgendaPage() {
       }
       await saveAppointment({ ...original, status: newStatus, updatedAt: new Date().toISOString() });
       toast.success(`Status alterado para "${newStatus}"!`);
-      refetchAppointments();
+      window.location.reload();
     } catch (err: any) {
       toast.error("Erro: " + err.message);
     }
@@ -559,9 +548,10 @@ export function AgendaPage() {
         if (!app.patientName?.toLowerCase().includes(q) && !app.title?.toLowerCase().includes(q)) return false;
       }
       if (filterStatus && app.status !== filterStatus) return false;
+      if (filterType && app.type !== filterType) return false;
       return true;
     });
-  }, [appointments, searchQuery, filterStatus]);
+  }, [appointments, searchQuery, filterStatus, filterType]);
 
   // Appointments for the selected day
   const dayAppointments = useMemo(
@@ -571,54 +561,16 @@ export function AgendaPage() {
 
   // ── Stats (based on ALL appointments, not filtered, today only) ───────────
   const stats = useMemo(() => {
-    const activeStatuses = new Set([
-      "agendado",
-      "confirmado",
-      "remarcado",
-    ]);
-
-    const todayAppts = appointments.filter(
-      (appointment) => appointment.appointmentDate === todayStr,
-    );
-
-    const totalHoje = todayAppts.filter((appointment) =>
-      activeStatuses.has(appointment.status),
-    ).length;
-
-    const confirmados = todayAppts.filter(
-      (appointment) => appointment.status === "confirmado",
-    ).length;
-
-    const pendentes = todayAppts.filter(
-      (appointment) => appointment.status === "agendado",
-    ).length;
-
-    const remarcados = todayAppts.filter(
-      (appointment) => appointment.status === "remarcado",
-    ).length;
-
-    const proximo =
-      appointments
-        .filter((appointment) => activeStatuses.has(appointment.status))
-        .filter(
-          (appointment) =>
-            new Date(
-              `${appointment.appointmentDate}T${appointment.startTime}`,
-            ) >= new Date(),
-        )
-        .sort(
-          (a, b) =>
-            a.appointmentDate.localeCompare(b.appointmentDate) ||
-            a.startTime.localeCompare(b.startTime),
-        )[0] ?? null;
-
-    return {
-      totalHoje,
-      confirmados,
-      pendentes,
-      remarcados,
-      proximo,
-    };
+    const todayAppts = appointments.filter(a => a.appointmentDate === todayStr);
+    const totalHoje = todayAppts.filter(a => a.status !== "cancelado").length;
+    const confirmados = todayAppts.filter(a => a.status === "confirmado").length;
+    const pendentes = todayAppts.filter(a => a.status === "agendado").length;
+    const cancelados = todayAppts.filter(a => a.status === "cancelado").length;
+    const proximo = appointments
+      .filter(a => a.status !== "cancelado" && a.status !== "concluído")
+      .filter(a => new Date(`${a.appointmentDate}T${a.startTime}`) >= new Date())
+      .sort((a, b) => a.appointmentDate.localeCompare(b.appointmentDate) || a.startTime.localeCompare(b.startTime))[0] ?? null;
+    return { totalHoje, confirmados, pendentes, cancelados, proximo };
   }, [appointments, todayStr]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -724,16 +676,16 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
               accent: "text-emerald-600",
             },
             {
-              label: "Agendados",
+              label: "Pendentes",
               value: stats.pendentes,
               icon: <Activity className="w-4 h-4" />,
               accent: "text-blue-500",
             },
             {
-              label: "Remarcados",
-              value: stats.remarcados,
-              icon: <Calendar className="w-4 h-4" />,
-              accent: "text-violet-600",
+              label: "Cancelados",
+              value: stats.cancelados,
+              icon: <XCircle className="w-4 h-4" />,
+              accent: "text-red-500",
             },
           ].map(stat => (
             <div key={stat.label} className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
@@ -787,16 +739,33 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
               <option value="">Todos os status</option>
               <option value="agendado">Agendado</option>
               <option value="confirmado">Confirmado</option>
+              <option value="em atendimento">Em atendimento</option>
+              <option value="concluído">Concluído</option>
+              <option value="faltou">Faltou</option>
+              <option value="cancelado">Cancelado</option>
               <option value="remarcado">Remarcado</option>
             </select>
+            {/* Type */}
+            <select
+              value={filterType}
+              onChange={e => setFilterType(e.target.value)}
+              className="h-8 rounded-lg border border-input bg-card px-2 text-xs outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition min-w-[120px]"
+            >
+              <option value="">Todos os tipos</option>
+              <option value="consulta">Consulta</option>
+              <option value="avaliação">Avaliação</option>
+              <option value="retorno">Retorno</option>
+              <option value="procedimento">Procedimento</option>
+              <option value="emergência">Emergência</option>
+              <option value="manutenção">Manutenção</option>
+              <option value="orçamento">Orçamento</option>
+              <option value="outro">Outro</option>
+            </select>
             {/* Clear */}
-            {(searchQuery || filterStatus) && (
+            {(searchQuery || filterStatus || filterType) && (
               <button
                 type="button"
-                onClick={() => {
-                  setSearchQuery("");
-                  setFilterStatus("");
-                }}
+                onClick={() => { setSearchQuery(""); setFilterStatus(""); setFilterType(""); }}
                 className="h-8 px-3 rounded-lg text-xs font-semibold text-muted-foreground border border-dashed border-border hover:border-red-300 hover:text-red-500 transition-colors"
               >
                 Limpar filtros
@@ -836,6 +805,19 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
                 onWhatsApp={handleWhatsApp}
                 onViewPatient={(patientId) =>
                   router.navigate({ to: `/pacientes/${patientId}` })
+                }
+                onCreateEvolution={(app) =>
+                  router.navigate({
+                    to: `/pacientes/${app.patientId}`,
+                    search: {
+                      tab: "ficha-clinica",
+                      newEvolution: "true",
+                      date: app.appointmentDate,
+                      procId: app.procedureId || undefined,
+                      procedureId: app.procedureId || undefined,
+                      notes: app.notes || `Consulta concluída: ${app.title}`,
+                    } as any,
+                  })
                 }
               />
             </div>
@@ -915,34 +897,68 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
             {/* Title */}
             <div>
               <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
-                Procedimento <span className="text-red-500">*</span>
+                Título <span className="text-muted-foreground font-normal">(opcional)</span>
               </label>
               <input
                 type="text"
-                placeholder="Ex.: Limpeza, restauração, avaliação..."
+                placeholder="Ex: Consulta Semestral, Limpeza..."
                 value={draft.title || ""}
                 onChange={e => setDraft({ ...draft, title: e.target.value })}
                 className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
               />
             </div>
-            {/* Status */}
+
+            {/* Type + Status */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">Tipo</label>
+                <select
+                  value={draft.type || "consulta"}
+                  onChange={e => setDraft({ ...draft, type: e.target.value as AppointmentType })}
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+                >
+                  <option value="consulta">Consulta</option>
+                  <option value="avaliação">Avaliação</option>
+                  <option value="retorno">Retorno</option>
+                  <option value="procedimento">Procedimento</option>
+                  <option value="emergência">Emergência</option>
+                  <option value="manutenção">Manutenção</option>
+                  <option value="orçamento">Orçamento</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">Status</label>
+                <select
+                  value={draft.status || "agendado"}
+                  onChange={e => setDraft({ ...draft, status: e.target.value as AppointmentStatus })}
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+                >
+                  <option value="agendado">Agendado</option>
+                  <option value="confirmado">Confirmado</option>
+                  <option value="em atendimento">Em atendimento</option>
+                  <option value="concluído">Concluído</option>
+                  <option value="faltou">Faltou</option>
+                  <option value="cancelado">Cancelado</option>
+                  <option value="remarcado">Remarcado</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Procedure */}
             <div>
-              <label className="mb-1.5 block text-xs font-semibold text-foreground/80">
-                Status
+              <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+                Procedimento <span className="text-muted-foreground font-normal">(opcional)</span>
               </label>
               <select
-                value={draft.status || "agendado"}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    status: event.target.value as AppointmentStatus,
-                  })
-                }
-                className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/40"
+                value={draft.procedureId || ""}
+                onChange={e => setDraft({ ...draft, procedureId: e.target.value || undefined })}
+                className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
               >
-                <option value="agendado">Agendado</option>
-                <option value="confirmado">Confirmado</option>
-                <option value="remarcado">Remarcado</option>
+                <option value="">Selecione...</option>
+                {procedures.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
               </select>
             </div>
 
@@ -1007,23 +1023,8 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
             <button
               type="button"
               onClick={handleSave}
-              disabled={
-                saving ||
-                !selectedPatientId ||
-                !draft.title?.trim() ||
-                !draft.appointmentDate ||
-                !draft.startTime ||
-                !draft.endTime
-              }
-              title={
-                !selectedPatientId ||
-                !draft.title?.trim() ||
-                !draft.appointmentDate ||
-                !draft.startTime ||
-                !draft.endTime
-                  ? "Preencha paciente, procedimento, data, início e fim."
-                  : ""
-              }
+              disabled={saving || !selectedPatientId || !draft.appointmentDate || !draft.startTime || !draft.endTime}
+              title={(!selectedPatientId || !draft.appointmentDate || !draft.startTime || !draft.endTime) ? "Preencha paciente, data, início e fim." : ""}
               className="agenda-btn-primary h-10 px-6 rounded-lg text-sm font-bold transition-colors shadow-sm"
             >
               {saving ? "Salvando..." : "Salvar agendamento"}

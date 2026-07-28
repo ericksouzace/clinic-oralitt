@@ -175,10 +175,28 @@ function OdontogramContent({ patientId }: Props) {
     );
   }
 
-  const openToothRegionModal = (
-    toothNumber: string,
-    targetRegion: string,
-  ) => {
+  const handleRegionClick = (toothNumber: string, clickedRegion: string) => {
+    const normalizedStatus = normalizeOdontogramStatus(brushStatus);
+
+    let targetRegion: string;
+
+    if (isStandaloneMarkerStatus(brushStatus)) {
+      // Sensibilidade e Mobilidade são apenas marcadores visuais acima do dente.
+      targetRegion = markerRegionForStatus(brushStatus);
+    } else if (isRootOnlyStatus(brushStatus)) {
+      // Canal é aplicado exclusivamente na raiz.
+      targetRegion = "raiz/base";
+    } else {
+      const forceWholeTooth =
+        brushRegion === "inteiro" ||
+        brushRegion === "dente inteiro" ||
+        normalizedStatus === "extração indicada" ||
+        normalizedStatus === "extração realizada" ||
+        normalizedStatus === "ausente";
+
+      targetRegion = forceWholeTooth ? "inteiro" : clickedRegion;
+    }
+
     const existing = sortNewestFirst(
       odontogramEntries.filter(
         (entry) =>
@@ -190,43 +208,9 @@ function OdontogramContent({ patientId }: Props) {
     )[0];
 
     setExistingEntryId(existing?.id || null);
-    setSelectedRegion({
-      tooth: toothNumber,
-      region: targetRegion,
-    });
+    setSelectedRegion({ tooth: toothNumber, region: targetRegion });
     setModalNotes(existing?.notes || "");
     setIsNotesModalOpen(true);
-  };
-
-  const handleRegionClick = (
-    toothNumber: string,
-    clickedRegion: string,
-  ) => {
-    const normalizedStatus = normalizeOdontogramStatus(brushStatus);
-
-    if (isStandaloneMarkerStatus(brushStatus)) {
-      openToothRegionModal(
-        toothNumber,
-        markerRegionForStatus(brushStatus),
-      );
-      return;
-    }
-
-    if (isRootOnlyStatus(brushStatus)) {
-      openToothRegionModal(toothNumber, "raiz/base");
-      return;
-    }
-
-    if (
-      normalizedStatus === "extração indicada" ||
-      normalizedStatus === "extração realizada" ||
-      normalizedStatus === "ausente"
-    ) {
-      openToothRegionModal(toothNumber, "inteiro");
-      return;
-    }
-
-    openToothRegionModal(toothNumber, clickedRegion);
   };
 
   const handleSaveEntry = async () => {
@@ -590,61 +574,6 @@ function OdontogramContent({ patientId }: Props) {
                 </div>
               </div>
             </div>
-
-
-            {!isStandaloneMarkerStatus(brushStatus) &&
-              !isRootOnlyStatus(brushStatus) &&
-              ![
-                "extração indicada",
-                "extração realizada",
-                "ausente",
-              ].includes(normalizeOdontogramStatus(brushStatus)) && (
-                <div>
-                  <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-                    Escolha a região
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {[
-                      ["inteiro", "Dente inteiro"],
-                      ["superior esquerdo", "Superior esquerdo"],
-                      ["superior direito", "Superior direito"],
-                      ["centro", "Centro"],
-                      ["inferior esquerdo", "Inferior esquerdo"],
-                      ["inferior direito", "Inferior direito"],
-                      ["raiz/base", "Raiz / canal"],
-                    ].map(([region, label]) => {
-                      const active =
-                        selectedRegion?.region === region ||
-                        (region === "inteiro" &&
-                          selectedRegion?.region === "dente inteiro");
-
-                      return (
-                        <button
-                          key={region}
-                          type="button"
-                          onClick={() => {
-                            if (!selectedRegion?.tooth) return;
-
-                            openToothRegionModal(
-                              selectedRegion.tooth,
-                              region,
-                            );
-                          }}
-                          className={[
-                            "rounded-xl border px-3 py-2.5 text-left text-xs font-medium transition",
-                            active
-                              ? "border-[#C9A227] bg-amber-50 text-[#7A5D12]"
-                              : "border-border bg-white text-slate-700 hover:border-amber-200 hover:bg-amber-50/40",
-                          ].join(" ")}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
             <div className="rounded-xl border border-border p-3">
               <div className="flex items-center gap-2">

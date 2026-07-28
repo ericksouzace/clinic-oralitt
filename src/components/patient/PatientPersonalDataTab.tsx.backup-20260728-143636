@@ -216,6 +216,14 @@ export function PatientPersonalDataTab({ patient, onSave }: PatientPersonalDataT
           </h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
+              <Label>Telefone</Label>
+              <Input
+                value={draft.phone || ""}
+                onChange={(event) => update("phone", formatPhone(event.target.value))}
+                disabled={!editing}
+              />
+            </div>
+            <div>
               <Label>WhatsApp</Label>
               <Input
                 value={draft.whatsapp || ""}
