@@ -221,11 +221,7 @@ function PacientesPage() {
                 <h3 className="text-sm font-bold text-gold tracking-wider uppercase mb-4 flex items-center gap-2">
                   <span className="w-6 h-[1px] bg-gold/30"></span> Contato
                 </h3>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Telefone Principal</Label>
-                    <Input value={draft.phone || ""} onChange={(e) => setDraft({ ...draft, phone: formatPhone(e.target.value) })} placeholder="(00) 00000-0000" />
-                  </div>
+                <div className="grid gap-4">
                   <div>
                     <Label>WhatsApp</Label>
                     <Input value={draft.whatsapp || ""} onChange={(e) => setDraft({ ...draft, whatsapp: formatPhone(e.target.value) })} placeholder="(00) 00000-0000" />
@@ -247,12 +243,7 @@ function PacientesPage() {
               {/* Seção 5: Dados internos */}
               <section className="border-t border-border pt-6">
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Status do Paciente *</Label>
-                    <Select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as PatientStatus })}>
-                      {PATIENT_STATUS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                    </Select>
-                  </div>
+
                   <div className="sm:col-span-2">
                     <Label>Observações Internas</Label>
                     <Input value={draft.administrativeNotes || ""} onChange={(e) => setDraft({ ...draft, administrativeNotes: e.target.value })} placeholder="Anotações para a clínica..." />
