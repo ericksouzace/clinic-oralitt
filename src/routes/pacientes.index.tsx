@@ -244,11 +244,8 @@ function PacientesPage() {
                 </div>
               </section>
 
-              {/* Seção 5: Observações */}
-              <section>
-                <h3 className="text-sm font-bold text-gold tracking-wider uppercase mb-4 flex items-center gap-2">
-                  <span className="w-6 h-[1px] bg-gold/30"></span> Administrativo
-                </h3>
+              {/* Seção 5: Dados internos */}
+              <section className="border-t border-border pt-6">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <Label>Status do Paciente *</Label>
