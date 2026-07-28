@@ -1,21 +1,66 @@
 import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Edit3, Calendar, Phone, Activity, FileText, DollarSign, Image as ImageIcon, Plus, ClipboardList, CheckCircle, Trash2, Clock, MessageCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit3,
+  Calendar,
+  Phone,
+  Activity,
+  FileText,
+  DollarSign,
+  Image as ImageIcon,
+  Plus,
+  ClipboardList,
+  CheckCircle,
+  Trash2,
+  Clock,
+  MessageCircle,
+} from "lucide-react";
 import AppLayout from "@/components/AppLayout";
-import { PageHeader, Card, Button, Badge, Input, Label, Select, Textarea } from "@/components/ui-bits";
-import { Patient, Anamnesis, AnamnesisStatus, ANAMNESIS_STATUS, OdontogramEntry, TOOTH_REGIONS, TOOTH_STATUS } from "@/lib/store";
-import { usePatients, useAnamneses, useOdontogramEntries, useAppointments, useBudgets, usePayments, useClinicalRecords } from "@/lib/db";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  PageHeader,
+  Card,
+  Button,
+  Badge,
+  Input,
+  Label,
+  Select,
+  Textarea,
+} from "@/components/ui-bits";
+import {
+  Patient,
+  Anamnesis,
+  AnamnesisStatus,
+  ANAMNESIS_STATUS,
+  OdontogramEntry,
+  TOOTH_REGIONS,
+  TOOTH_STATUS,
+} from "@/lib/store";
+import {
+  usePatients,
+  useAnamneses,
+  useOdontogramEntries,
+  useAppointments,
+  useBudgets,
+  usePayments,
+  useClinicalRecords,
+} from "@/lib/db";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { OdontogramTab } from "@/components/odontogram/OdontogramTab";
 import { TreatmentPlanTab } from "@/components/treatment-plan/TreatmentPlanTab";
 import { ClinicalRecordTab } from "@/components/clinical-record/ClinicalRecordTab";
 import { FinanceTab } from "@/components/finance/FinanceTab";
+import { PatientPersonalDataTab } from "@/components/patient/PatientPersonalDataTab";
 import { getWhatsAppLogs } from "@/lib/whatsapp";
 import { ClinicalPhotosTab } from "@/components/patient-files/ClinicalPhotosTab";
 import { DocumentsTab } from "@/components/patient-files/DocumentsTab";
 import { toast } from "sonner";
-
-
 
 export const Route = createFileRoute("/pacientes_/$patientId")({
   head: () => ({ meta: [{ title: "Ficha do Paciente — Oralit" }] }),
@@ -33,24 +78,26 @@ function calcAge(birthDate: string | undefined): number | null {
 }
 
 const TAB_MAP = {
-  "resumo": "Resumo",
+  resumo: "Resumo",
   "dados-pessoais": "Dados pessoais",
-  "anamnese": "Anamnese",
-  "odontograma": "Odontograma",
+  anamnese: "Anamnese",
+  odontograma: "Odontograma",
   "plano-tratamento": "Plano de tratamento",
   "ficha-clinica": "Ficha clínica",
-  "financeiro": "Financeiro",
+  financeiro: "Financeiro",
   "fotos-clinicas": "Fotos clínicas",
-  "documentos": "Documentos"
+  documentos: "Documentos",
 } as const;
 
 type TabType = keyof typeof TAB_MAP;
-const TABS = Object.keys(TAB_MAP) as TabType[];
+const TABS: TabType[] = (Object.keys(TAB_MAP) as TabType[]).filter(
+  (tab) => tab !== "resumo" && tab !== "fotos-clinicas",
+);
 
 function PatientProfilePage() {
   const { patientId } = Route.useParams();
   const router = useRouter();
-  const [patients, , loading, error] = usePatients();
+  const [patients, setPatients, loading, error] = usePatients();
   const [anamneses, setAnamneses, loadingAnamnesis, errorAnamnesis] = useAnamneses(patientId);
   const [odontEntries] = useOdontogramEntries(patientId);
   const [appointments] = useAppointments(patientId);
@@ -59,7 +106,7 @@ function PatientProfilePage() {
   const [clinicalRecords] = useClinicalRecords(patientId);
 
   // ── Financial and Clinical Calculations for Resume ───────────────────────
-  const approvedBudgets = budgets ? budgets.filter(b => b.status === "aprovado") : [];
+  const approvedBudgets = budgets ? budgets.filter((b) => b.status === "aprovado") : [];
   const totalOrcado = approvedBudgets.reduce((sum, b) => sum + (b.finalAmount || 0), 0);
   const totalPago = payments ? payments.reduce((sum, p) => sum + (p.amount || 0), 0) : 0;
   const saldoDevedor = Math.max(0, totalOrcado - totalPago);
@@ -74,7 +121,7 @@ function PatientProfilePage() {
       try {
         const { logs: allLogs } = await getWhatsAppLogs();
         if (active) {
-          const filtered = allLogs.filter(l => l.patientId === patientId);
+          const filtered = allLogs.filter((l) => l.patientId === patientId);
           setPatientLogs(filtered);
         }
       } catch (e) {
@@ -82,20 +129,27 @@ function PatientProfilePage() {
       }
     }
     loadLogs();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId]);
 
   // Filter next and past appointments for resume tab
-  const nextAppt = appointments.find(a => {
+  const nextAppt = appointments.find((a) => {
     if (a.status === "cancelado" || a.status === "concluído") return false;
     const todayStr = new Date().toISOString().split("T")[0];
     return a.appointmentDate >= todayStr;
   });
 
   const pastAppts = appointments
-    .filter(a => {
+    .filter((a) => {
       const todayStr = new Date().toISOString().split("T")[0];
-      return a.appointmentDate < todayStr || a.status === "concluído" || a.status === "cancelado" || a.status === "faltou";
+      return (
+        a.appointmentDate < todayStr ||
+        a.status === "concluído" ||
+        a.status === "cancelado" ||
+        a.status === "faltou"
+      );
     })
     .sort((a, b) => {
       const dateCompare = b.appointmentDate.localeCompare(a.appointmentDate);
@@ -103,12 +157,12 @@ function PatientProfilePage() {
       return b.startTime.localeCompare(a.startTime);
     })
     .slice(0, 3);
-  
+
   const [activeTab, setActiveTabState] = useState<TabType>(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab") as TabType;
-      if (tab && TAB_MAP[tab]) {
+      if (tab && TABS.includes(tab)) {
         return tab;
       }
     }
@@ -129,12 +183,12 @@ function PatientProfilePage() {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const tab = params.get("tab") as TabType;
-      if (tab && TAB_MAP[tab] && tab !== activeTab) {
+      if (tab && TABS.includes(tab) && tab !== activeTab) {
         setActiveTabState(tab);
       }
     }
   }, [router.state.location.search, activeTab]);
-  
+
   const [anamnesisDraft, setAnamnesisDraft] = useState<Anamnesis | null>(null);
 
   if (loading) {
@@ -151,7 +205,9 @@ function PatientProfilePage() {
     return (
       <AppLayout>
         <div className="py-16 text-center">
-          <h2 className="text-xl font-display font-bold mb-2 text-rose-600">Erro ao carregar dados do paciente</h2>
+          <h2 className="text-xl font-display font-bold mb-2 text-rose-600">
+            Erro ao carregar dados do paciente
+          </h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">{error}</p>
           <Button variant="outline" onClick={() => router.navigate({ to: "/pacientes" })}>
             Voltar para Pacientes
@@ -161,14 +217,16 @@ function PatientProfilePage() {
     );
   }
 
-  const patient = patients.find(p => p.id === patientId);
+  const patient = patients.find((p) => p.id === patientId);
 
   if (!patient) {
     return (
       <AppLayout>
         <div className="py-16 text-center">
           <h2 className="text-xl font-display font-bold mb-2">Paciente não encontrado</h2>
-          <p className="text-muted-foreground mb-6">Este paciente não existe ou você não tem permissão para acessá-lo.</p>
+          <p className="text-muted-foreground mb-6">
+            Este paciente não existe ou você não tem permissão para acessá-lo.
+          </p>
           <Button variant="gold" onClick={() => router.navigate({ to: "/pacientes" })}>
             Voltar para Pacientes
           </Button>
@@ -182,12 +240,14 @@ function PatientProfilePage() {
   return (
     <AppLayout>
       <div className="mb-6 flex items-center justify-between">
-        <Button variant="outline" onClick={() => router.navigate({ to: "/pacientes" })} className="h-9 px-3 text-xs">
+        <Button
+          variant="outline"
+          onClick={() => router.navigate({ to: "/pacientes" })}
+          className="h-9 px-3 text-xs"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
         </Button>
       </div>
-
-
 
       {/* Anamnesis Modal */}
       {anamnesisDraft && (
@@ -205,7 +265,7 @@ function PatientProfilePage() {
                 ✕
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto space-y-8">
               {/* Seção 1 */}
               <section>
@@ -215,19 +275,43 @@ function PatientProfilePage() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div className="sm:col-span-2">
                     <Label>Queixa Principal</Label>
-                    <Textarea rows={2} value={anamnesisDraft.mainComplaint || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, mainComplaint: e.target.value})} placeholder="Qual o motivo da consulta?" />
+                    <Textarea
+                      rows={2}
+                      value={anamnesisDraft.mainComplaint || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, mainComplaint: e.target.value })
+                      }
+                      placeholder="Qual o motivo da consulta?"
+                    />
                   </div>
                   <div>
                     <Label>Faz uso de alguma medicação?</Label>
-                    <Input value={anamnesisDraft.medications || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, medications: e.target.value})} placeholder="Qual(is)?" />
+                    <Input
+                      value={anamnesisDraft.medications || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, medications: e.target.value })
+                      }
+                      placeholder="Qual(is)?"
+                    />
                   </div>
                   <div>
                     <Label>Possui alguma alergia?</Label>
-                    <Input value={anamnesisDraft.allergies || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, allergies: e.target.value})} placeholder="Medicamentos, látex, etc..." />
+                    <Input
+                      value={anamnesisDraft.allergies || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, allergies: e.target.value })
+                      }
+                      placeholder="Medicamentos, látex, etc..."
+                    />
                   </div>
                   <div>
                     <Label>Como é a sua pressão arterial?</Label>
-                    <Select value={anamnesisDraft.bloodPressure || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, bloodPressure: e.target.value})}>
+                    <Select
+                      value={anamnesisDraft.bloodPressure || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, bloodPressure: e.target.value })
+                      }
+                    >
                       <option value="">Selecione...</option>
                       <option value="Normal">Normal</option>
                       <option value="Alta">Alta</option>
@@ -237,7 +321,13 @@ function PatientProfilePage() {
                   </div>
                   <div>
                     <Label>Outros problemas de saúde?</Label>
-                    <Input value={anamnesisDraft.healthProblems || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, healthProblems: e.target.value})} placeholder="Doenças pré-existentes..." />
+                    <Input
+                      value={anamnesisDraft.healthProblems || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, healthProblems: e.target.value })
+                      }
+                      placeholder="Doenças pré-existentes..."
+                    />
                   </div>
                 </div>
               </section>
@@ -256,12 +346,28 @@ function PatientProfilePage() {
                     { key: "previousSurgery", label: "Cirurgia recente?" },
                     { key: "pregnancy", label: "Gestante?" },
                     { key: "anesthesiaReaction", label: "Reação à anestesia?" },
-                  ].map(field => (
+                  ].map((field) => (
                     <div key={field.key}>
                       <Label>{field.label}</Label>
-                      <Select 
-                        value={anamnesisDraft[field.key as keyof Anamnesis] === true ? "true" : anamnesisDraft[field.key as keyof Anamnesis] === false ? "false" : ""}
-                        onChange={e => setAnamnesisDraft({...anamnesisDraft, [field.key]: e.target.value === "true" ? true : e.target.value === "false" ? false : null})}
+                      <Select
+                        value={
+                          anamnesisDraft[field.key as keyof Anamnesis] === true
+                            ? "true"
+                            : anamnesisDraft[field.key as keyof Anamnesis] === false
+                              ? "false"
+                              : ""
+                        }
+                        onChange={(e) =>
+                          setAnamnesisDraft({
+                            ...anamnesisDraft,
+                            [field.key]:
+                              e.target.value === "true"
+                                ? true
+                                : e.target.value === "false"
+                                  ? false
+                                  : undefined,
+                          })
+                        }
                       >
                         <option value="">Selecione</option>
                         <option value="true">Sim</option>
@@ -280,13 +386,35 @@ function PatientProfilePage() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <Label>Dor nos dentes ou gengiva?</Label>
-                    <Input value={anamnesisDraft.toothOrGumPain || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, toothOrGumPain: e.target.value})} placeholder="Descreva brevemente..." />
+                    <Input
+                      value={anamnesisDraft.toothOrGumPain || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, toothOrGumPain: e.target.value })
+                      }
+                      placeholder="Descreva brevemente..."
+                    />
                   </div>
                   <div>
                     <Label>Sangramento gengival?</Label>
-                    <Select 
-                      value={anamnesisDraft.gumBleeding === true ? "true" : anamnesisDraft.gumBleeding === false ? "false" : ""}
-                      onChange={e => setAnamnesisDraft({...anamnesisDraft, gumBleeding: e.target.value === "true" ? true : e.target.value === "false" ? false : null})}
+                    <Select
+                      value={
+                        anamnesisDraft.gumBleeding === true
+                          ? "true"
+                          : anamnesisDraft.gumBleeding === false
+                            ? "false"
+                            : ""
+                      }
+                      onChange={(e) =>
+                        setAnamnesisDraft({
+                          ...anamnesisDraft,
+                          gumBleeding:
+                            e.target.value === "true"
+                              ? true
+                              : e.target.value === "false"
+                                ? false
+                                : undefined,
+                        })
+                      }
                     >
                       <option value="">Selecione</option>
                       <option value="true">Sim</option>
@@ -295,7 +423,12 @@ function PatientProfilePage() {
                   </div>
                   <div>
                     <Label>Frequência de escovação</Label>
-                    <Select value={anamnesisDraft.brushingFrequency || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, brushingFrequency: e.target.value})}>
+                    <Select
+                      value={anamnesisDraft.brushingFrequency || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, brushingFrequency: e.target.value })
+                      }
+                    >
                       <option value="">Selecione...</option>
                       <option value="1x ao dia">1x ao dia</option>
                       <option value="2x ao dia">2x ao dia</option>
@@ -305,7 +438,12 @@ function PatientProfilePage() {
                   </div>
                   <div>
                     <Label>Uso de fio dental</Label>
-                    <Select value={anamnesisDraft.flossUse || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, flossUse: e.target.value})}>
+                    <Select
+                      value={anamnesisDraft.flossUse || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, flossUse: e.target.value })
+                      }
+                    >
                       <option value="">Selecione...</option>
                       <option value="Diariamente">Diariamente</option>
                       <option value="Às vezes">Às vezes</option>
@@ -314,9 +452,25 @@ function PatientProfilePage() {
                   </div>
                   <div>
                     <Label>Fumante?</Label>
-                    <Select 
-                      value={anamnesisDraft.smoker === true ? "true" : anamnesisDraft.smoker === false ? "false" : ""}
-                      onChange={e => setAnamnesisDraft({...anamnesisDraft, smoker: e.target.value === "true" ? true : e.target.value === "false" ? false : null})}
+                    <Select
+                      value={
+                        anamnesisDraft.smoker === true
+                          ? "true"
+                          : anamnesisDraft.smoker === false
+                            ? "false"
+                            : ""
+                      }
+                      onChange={(e) =>
+                        setAnamnesisDraft({
+                          ...anamnesisDraft,
+                          smoker:
+                            e.target.value === "true"
+                              ? true
+                              : e.target.value === "false"
+                                ? false
+                                : undefined,
+                        })
+                      }
                     >
                       <option value="">Selecione</option>
                       <option value="true">Sim</option>
@@ -334,9 +488,25 @@ function PatientProfilePage() {
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <Label>Declaração de veracidade</Label>
-                    <Select 
-                      value={anamnesisDraft.truthDeclaration === true ? "true" : anamnesisDraft.truthDeclaration === false ? "false" : ""}
-                      onChange={e => setAnamnesisDraft({...anamnesisDraft, truthDeclaration: e.target.value === "true" ? true : e.target.value === "false" ? false : null})}
+                    <Select
+                      value={
+                        anamnesisDraft.truthDeclaration === true
+                          ? "true"
+                          : anamnesisDraft.truthDeclaration === false
+                            ? "false"
+                            : ""
+                      }
+                      onChange={(e) =>
+                        setAnamnesisDraft({
+                          ...anamnesisDraft,
+                          truthDeclaration:
+                            e.target.value === "true"
+                              ? true
+                              : e.target.value === "false"
+                                ? false
+                                : undefined,
+                        })
+                      }
                     >
                       <option value="">Confirma a veracidade?</option>
                       <option value="true">Sim, declaro que as informações são verdadeiras</option>
@@ -345,35 +515,66 @@ function PatientProfilePage() {
                   </div>
                   <div>
                     <Label>Assinatura (Nome)</Label>
-                    <Input value={anamnesisDraft.signature || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, signature: e.target.value})} placeholder="Assinatura do paciente..." />
+                    <Input
+                      value={anamnesisDraft.signature || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, signature: e.target.value })
+                      }
+                      placeholder="Assinatura do paciente..."
+                    />
                   </div>
                   <div className="sm:col-span-2">
                     <Label>Observações adicionais da Clínica</Label>
-                    <Textarea rows={2} value={anamnesisDraft.notes || ""} onChange={e => setAnamnesisDraft({...anamnesisDraft, notes: e.target.value})} placeholder="Anotações internas..." />
+                    <Textarea
+                      rows={2}
+                      value={anamnesisDraft.notes || ""}
+                      onChange={(e) =>
+                        setAnamnesisDraft({ ...anamnesisDraft, notes: e.target.value })
+                      }
+                      placeholder="Anotações internas..."
+                    />
                   </div>
                   <div className="sm:col-span-2">
                     <Label>Status da Anamnese</Label>
-                    <Select value={anamnesisDraft.status} onChange={e => setAnamnesisDraft({...anamnesisDraft, status: e.target.value as AnamnesisStatus})}>
-                      {ANAMNESIS_STATUS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                    <Select
+                      value={anamnesisDraft.status}
+                      onChange={(e) =>
+                        setAnamnesisDraft({
+                          ...anamnesisDraft,
+                          status: e.target.value as AnamnesisStatus,
+                        })
+                      }
+                    >
+                      {ANAMNESIS_STATUS.map((s) => (
+                        <option key={s} value={s}>
+                          {s.charAt(0).toUpperCase() + s.slice(1)}
+                        </option>
+                      ))}
                     </Select>
                   </div>
                 </div>
               </section>
-
             </div>
-            
+
             <div className="px-6 py-4 border-t border-border bg-secondary/30 flex justify-end gap-3 mt-auto">
-              <Button variant="outline" onClick={() => setAnamnesisDraft(null)}>Cancelar</Button>
-              <Button variant="gold" onClick={async () => {
-                const isNew = !anamnesisDraft.id;
-                const draft = isNew ? { ...anamnesisDraft, id: crypto.randomUUID() } : anamnesisDraft;
-                await setAnamneses(prev => {
-                  if (isNew) return [draft, ...prev];
-                  return prev.map(a => a.id === draft.id ? draft : a);
-                });
-                toast.success("Anamnese " + (isNew ? "salva" : "atualizada") + " com sucesso.");
-                setAnamnesisDraft(null);
-              }}>
+              <Button variant="outline" onClick={() => setAnamnesisDraft(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="gold"
+                onClick={async () => {
+                  const isNew = !anamnesisDraft.id;
+                  const draft = isNew
+                    ? { ...anamnesisDraft, id: crypto.randomUUID() }
+                    : anamnesisDraft;
+                  await setAnamneses((prev) => {
+                    if (isNew) return [draft, ...prev];
+                    return prev.map((a) => (a.id === draft.id ? draft : a));
+                  });
+                  toast.success("Anamnese " + (isNew ? "salva" : "atualizada") + " com sucesso.");
+                  setAnamnesisDraft(null);
+                }}
+              >
                 <CheckCircle className="h-4 w-4 mr-2" /> Salvar Anamnese
               </Button>
             </div>
@@ -386,23 +587,23 @@ function PatientProfilePage() {
         <div>
           <div className="flex flex-wrap items-center gap-3 mb-2">
             <h1 className="text-2xl font-display font-bold text-foreground">{patient.fullName}</h1>
-            <Badge variant={
-              patient.status === "ativo" || patient.status === "em tratamento" ? "success" : 
-              patient.status === "retorno" ? "warning" : "secondary"
-            } className="capitalize">
-              {patient.status}
-            </Badge>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
             {patient.recordNumber && (
-              <span className="flex items-center gap-1.5"><FileText className="h-4 w-4" /> PR: {patient.recordNumber}</span>
+              <span className="flex items-center gap-1.5">
+                <FileText className="h-4 w-4" /> PR: {patient.recordNumber}
+              </span>
             )}
             {age !== null && (
-              <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" /> {age} anos</span>
+              <span className="flex items-center gap-1.5">
+                <Calendar className="h-4 w-4" /> {age} anos
+              </span>
             )}
             {(patient.phone || patient.whatsapp) && (
-              <span className="flex items-center gap-1.5"><Phone className="h-4 w-4" /> {patient.whatsapp || patient.phone}</span>
+              <span className="flex items-center gap-1.5">
+                <Phone className="h-4 w-4" /> {patient.whatsapp || patient.phone}
+              </span>
             )}
           </div>
         </div>
@@ -410,13 +611,13 @@ function PatientProfilePage() {
 
       {/* Navegação de Abas */}
       <div className="flex overflow-x-auto no-scrollbar border-b border-border mb-6">
-        {TABS.map(tab => (
+        {TABS.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab 
-                ? "border-gold text-gold" 
+              activeTab === tab
+                ? "border-gold text-gold"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
             }`}
           >
@@ -427,16 +628,19 @@ function PatientProfilePage() {
 
       {/* Conteúdo das Abas */}
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-        
         {activeTab === "resumo" && (
           <div className="grid lg:grid-cols-3 gap-6">
             <div className="lg:col-span-1 space-y-6">
               <Card className="p-5">
-                <h3 className="font-display font-bold mb-4 flex items-center gap-2"><FileText className="h-4 w-4 text-gold" /> Visão Geral</h3>
+                <h3 className="font-display font-bold mb-4 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-gold" /> Visão Geral
+                </h3>
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between border-b border-border/50 pb-2">
                     <dt className="text-muted-foreground">Cadastrado em</dt>
-                    <dd className="font-medium">{new Date(patient.createdAt).toLocaleDateString()}</dd>
+                    <dd className="font-medium">
+                      {new Date(patient.createdAt).toLocaleDateString()}
+                    </dd>
                   </div>
                   <div className="flex justify-between border-b border-border/50 pb-2">
                     <dt className="text-muted-foreground">Telefone</dt>
@@ -449,8 +653,12 @@ function PatientProfilePage() {
                 </dl>
                 {patient.administrativeNotes && (
                   <div className="mt-4 pt-4 border-t border-border">
-                    <dt className="text-xs text-muted-foreground font-semibold uppercase mb-1">Anotações Administrativas</dt>
-                    <dd className="text-sm bg-secondary/50 p-3 rounded-lg border border-border/50">{patient.administrativeNotes}</dd>
+                    <dt className="text-xs text-muted-foreground font-semibold uppercase mb-1">
+                      Anotações Administrativas
+                    </dt>
+                    <dd className="text-sm bg-secondary/50 p-3 rounded-lg border border-border/50">
+                      {patient.administrativeNotes}
+                    </dd>
                   </div>
                 )}
               </Card>
@@ -459,15 +667,17 @@ function PatientProfilePage() {
                 <h3 className="font-display font-bold mb-4 flex items-center gap-2">
                   <MessageCircle className="h-4 w-4 text-[#C9A227]" /> Comunicações
                 </h3>
-                
+
                 <div className="text-xs space-y-4">
                   <div className="flex justify-between items-center bg-gray-50 border p-2.5 rounded-lg">
                     <span className="font-semibold text-gray-700">Consentimento de Disparo:</span>
                     <Badge tone="ok">Autorizado</Badge>
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Histórico de WhatsApp</span>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">
+                      Histórico de WhatsApp
+                    </span>
                     {patientLogs.length === 0 ? (
                       <p className="text-muted-foreground italic text-[11px] py-3 text-center border border-dashed rounded bg-gray-50/50">
                         Nenhuma mensagem enviada.
@@ -475,19 +685,34 @@ function PatientProfilePage() {
                     ) : (
                       <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5">
                         {patientLogs.map((l, idx) => (
-                          <div key={l.id || idx} className="p-2 border rounded bg-white text-[11px] space-y-1 hover:border-gold/30 transition">
+                          <div
+                            key={l.id || idx}
+                            className="p-2 border rounded bg-white text-[11px] space-y-1 hover:border-gold/30 transition"
+                          >
                             <div className="flex justify-between items-center gap-2">
                               <span className="text-muted-foreground font-semibold">
                                 {new Date(l.createdAt).toLocaleDateString("pt-BR")}
                               </span>
-                              <Badge tone={
-                                l.status === "enviada" || l.status === "aberta_manual" ? "ok" : 
-                                l.status === "simulada" ? "neutral" : "danger"
-                              } className="text-[8px] px-1 py-0">
-                                {l.status === "aberta_manual" ? "Manual" : l.status === "simulada" ? "Simulada" : l.status}
+                              <Badge
+                                tone={
+                                  l.status === "enviada" || l.status === "aberta_manual"
+                                    ? "ok"
+                                    : l.status === "simulada"
+                                      ? "neutral"
+                                      : "danger"
+                                }
+                                className="text-[8px] px-1 py-0"
+                              >
+                                {l.status === "aberta_manual"
+                                  ? "Manual"
+                                  : l.status === "simulada"
+                                    ? "Simulada"
+                                    : l.status}
                               </Badge>
                             </div>
-                            <p className="line-clamp-2 text-gray-600 leading-relaxed italic">"{l.message}"</p>
+                            <p className="line-clamp-2 text-gray-600 leading-relaxed italic">
+                              "{l.message}"
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -501,8 +726,8 @@ function PatientProfilePage() {
                       router.navigate({
                         to: "/whatsapp",
                         search: {
-                          tab: "history"
-                        } as any
+                          tab: "history",
+                        } as any,
                       });
                     }}
                   >
@@ -511,7 +736,7 @@ function PatientProfilePage() {
                 </div>
               </Card>
             </div>
-            
+
             <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4">
               <Card className="p-5 flex flex-col h-auto min-h-[160px] col-span-1 sm:col-span-2 bg-white border border-border">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
@@ -520,20 +745,22 @@ function PatientProfilePage() {
                     Agenda do Paciente
                   </h4>
                   <div className="flex flex-wrap gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="text-xs h-7 py-1 px-2.5 text-muted-foreground"
                       onClick={() => router.navigate({ to: "/agenda" })}
                     >
                       Ver agenda completa
                     </Button>
-                    <Button 
+                    <Button
                       className="bg-[#C9A227] hover:bg-[#b59122] text-white text-xs h-7 py-1 px-2.5 font-semibold"
-                      onClick={() => router.navigate({ 
-                        to: "/agenda", 
-                        search: { newAppt: "true", patientId: patient.id } as any 
-                      })}
+                      onClick={() =>
+                        router.navigate({
+                          to: "/agenda",
+                          search: { newAppt: "true", patientId: patient.id } as any,
+                        })
+                      }
                     >
                       <Plus className="w-3 h-3 mr-1" /> Novo agendamento
                     </Button>
@@ -543,50 +770,78 @@ function PatientProfilePage() {
                 <div className="grid md:grid-cols-2 gap-4 mt-2">
                   {/* Próximo agendamento */}
                   <div className="border-r border-border/50 pr-4">
-                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block mb-2">Próximo Atendimento</span>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block mb-2">
+                      Próximo Atendimento
+                    </span>
                     {nextAppt ? (
                       <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-3">
                         <div className="flex justify-between items-start">
                           <span className="font-extrabold text-xs text-[#C9A227] bg-white px-2 py-0.5 rounded border border-amber-500/10 shadow-sm flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5 shrink-0 text-gold" />
-                            {new Date(nextAppt.appointmentDate + "T00:00:00").toLocaleDateString("pt-BR")} às {nextAppt.startTime}
+                            {new Date(nextAppt.appointmentDate + "T00:00:00").toLocaleDateString(
+                              "pt-BR",
+                            )}{" "}
+                            às {nextAppt.startTime}
                           </span>
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 capitalize bg-white">
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] px-1.5 py-0 capitalize bg-white"
+                          >
                             {nextAppt.status}
                           </Badge>
                         </div>
-                        <h5 className="font-bold text-xs text-gray-800 mt-2 truncate">{nextAppt.title}</h5>
+                        <h5 className="font-bold text-xs text-gray-800 mt-2 truncate">
+                          {nextAppt.title}
+                        </h5>
                         {nextAppt.notes && (
-                          <p className="text-[11px] text-muted-foreground italic truncate mt-1">"{nextAppt.notes}"</p>
+                          <p className="text-[11px] text-muted-foreground italic truncate mt-1">
+                            "{nextAppt.notes}"
+                          </p>
                         )}
                       </div>
                     ) : (
                       <div className="text-center py-6 border border-dashed rounded-xl bg-gray-50/50 flex flex-col items-center justify-center">
                         <Clock className="h-5 w-5 text-muted-foreground/40 mb-1" />
-                        <p className="text-xs text-muted-foreground italic">Nenhum atendimento agendado</p>
+                        <p className="text-xs text-muted-foreground italic">
+                          Nenhum atendimento agendado
+                        </p>
                       </div>
                     )}
                   </div>
 
                   {/* Últimos atendimentos */}
                   <div className="pl-0 md:pl-2">
-                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block mb-2">Últimos Atendimentos</span>
+                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block mb-2">
+                      Últimos Atendimentos
+                    </span>
                     {pastAppts.length > 0 ? (
                       <div className="space-y-2">
-                        {pastAppts.map(appt => (
-                          <div key={appt.id} className="flex justify-between items-center text-xs py-1.5 border-b border-border/40 last:border-0">
+                        {pastAppts.map((appt) => (
+                          <div
+                            key={appt.id}
+                            className="flex justify-between items-center text-xs py-1.5 border-b border-border/40 last:border-0"
+                          >
                             <div className="min-w-0 pr-2">
                               <p className="font-bold text-gray-800 truncate">{appt.title}</p>
                               <p className="text-[10px] text-muted-foreground">
-                                {new Date(appt.appointmentDate + "T00:00:00").toLocaleDateString("pt-BR")} às {appt.startTime}
+                                {new Date(appt.appointmentDate + "T00:00:00").toLocaleDateString(
+                                  "pt-BR",
+                                )}{" "}
+                                às {appt.startTime}
                               </p>
                             </div>
-                            <Badge variant="outline" className={`text-[9px] px-1 py-0 uppercase shrink-0 ${
-                              appt.status === "concluído" ? "bg-teal-600/10 text-teal-800 border-teal-600/20" :
-                              appt.status === "faltou" ? "bg-rose-500/10 text-rose-700 border-rose-500/20" :
-                              appt.status === "cancelado" ? "bg-red-500/10 text-red-700 border-red-500/20" :
-                              "bg-gray-500/10 text-gray-700"
-                            }`}>
+                            <Badge
+                              variant="outline"
+                              className={`text-[9px] px-1 py-0 uppercase shrink-0 ${
+                                appt.status === "concluído"
+                                  ? "bg-teal-600/10 text-teal-800 border-teal-600/20"
+                                  : appt.status === "faltou"
+                                    ? "bg-rose-500/10 text-rose-700 border-rose-500/20"
+                                    : appt.status === "cancelado"
+                                      ? "bg-red-500/10 text-red-700 border-red-500/20"
+                                      : "bg-gray-500/10 text-gray-700"
+                              }`}
+                            >
                               {appt.status}
                             </Badge>
                           </div>
@@ -595,7 +850,9 @@ function PatientProfilePage() {
                     ) : (
                       <div className="text-center py-6 border border-dashed rounded-xl bg-gray-50/50 flex flex-col items-center justify-center">
                         <Clock className="h-5 w-5 text-muted-foreground/40 mb-1" />
-                        <p className="text-xs text-muted-foreground italic">Sem histórico de atendimentos</p>
+                        <p className="text-xs text-muted-foreground italic">
+                          Sem histórico de atendimentos
+                        </p>
                       </div>
                     )}
                   </div>
@@ -606,17 +863,29 @@ function PatientProfilePage() {
                   <Activity className="h-4 w-4 text-gold" />
                   Últimos Eventos Odontológicos
                 </h4>
-                {(!odontEntries || odontEntries.length === 0) ? (
-                  <p className="text-xs text-muted-foreground my-auto text-center">Nenhum evento registrado</p>
+                {!odontEntries || odontEntries.length === 0 ? (
+                  <p className="text-xs text-muted-foreground my-auto text-center">
+                    Nenhum evento registrado
+                  </p>
                 ) : (
                   <div className="space-y-2 text-xs flex-1 overflow-y-auto max-h-[150px]">
-                    {odontEntries.slice(0, 4).map(entry => (
-                      <div key={entry.id} className="flex items-center justify-between py-1 border-b border-border/50 last:border-0">
+                    {odontEntries.slice(0, 4).map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between py-1 border-b border-border/50 last:border-0"
+                      >
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: entry.color || "black" }} />
-                          <span className="font-medium truncate text-foreground/90 capitalize">{entry.status}</span>
+                          <div
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: entry.color || "black" }}
+                          />
+                          <span className="font-medium truncate text-foreground/90 capitalize">
+                            {entry.status}
+                          </span>
                         </div>
-                        <span className="text-muted-foreground font-semibold shrink-0">Dente {entry.toothNumber}</span>
+                        <span className="text-muted-foreground font-semibold shrink-0">
+                          Dente {entry.toothNumber}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -630,22 +899,34 @@ function PatientProfilePage() {
                   </h4>
                   <div className="grid grid-cols-3 gap-2 text-center mt-2">
                     <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">Orçado</span>
-                      <span className="text-xs font-bold text-gray-700 block mt-0.5">R$ {totalOrcado.toFixed(2)}</span>
+                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">
+                        Orçado
+                      </span>
+                      <span className="text-xs font-bold text-gray-700 block mt-0.5">
+                        R$ {totalOrcado.toFixed(2)}
+                      </span>
                     </div>
                     <div className="bg-emerald-50/50 p-2 rounded border border-emerald-100">
-                      <span className="text-[10px] text-emerald-700 font-semibold block uppercase">Pago</span>
-                      <span className="text-xs font-bold text-emerald-600 block mt-0.5">R$ {totalPago.toFixed(2)}</span>
+                      <span className="text-[10px] text-emerald-700 font-semibold block uppercase">
+                        Pago
+                      </span>
+                      <span className="text-xs font-bold text-emerald-600 block mt-0.5">
+                        R$ {totalPago.toFixed(2)}
+                      </span>
                     </div>
                     <div className="bg-rose-50/50 p-2 rounded border border-rose-100">
-                      <span className="text-[10px] text-rose-700 font-semibold block uppercase">A Pagar</span>
-                      <span className="text-xs font-bold text-rose-600 block mt-0.5">R$ {saldoDevedor.toFixed(2)}</span>
+                      <span className="text-[10px] text-rose-700 font-semibold block uppercase">
+                        A Pagar
+                      </span>
+                      <span className="text-xs font-bold text-rose-600 block mt-0.5">
+                        R$ {saldoDevedor.toFixed(2)}
+                      </span>
                     </div>
                   </div>
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="w-full text-xs h-8 font-semibold mt-4"
                   onClick={() => setActiveTab("financeiro")}
                 >
@@ -663,7 +944,9 @@ function PatientProfilePage() {
                       <div className="flex justify-between items-center text-xs text-muted-foreground">
                         <span>{new Date(latestEvolution.recordDate).toLocaleDateString()}</span>
                         {latestEvolution.procedureName && (
-                          <Badge tone="gold" className="text-[9px] py-0">{latestEvolution.procedureName}</Badge>
+                          <Badge tone="gold" className="text-[9px] py-0">
+                            {latestEvolution.procedureName}
+                          </Badge>
                         )}
                       </div>
                       <p className="text-xs text-gray-700 line-clamp-2 mt-1 leading-relaxed">
@@ -676,9 +959,9 @@ function PatientProfilePage() {
                     </p>
                   )}
                 </div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="w-full text-xs h-8 font-semibold mt-4"
                   onClick={() => setActiveTab("ficha-clinica")}
                 >
@@ -690,53 +973,14 @@ function PatientProfilePage() {
         )}
 
         {activeTab === "dados-pessoais" && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="font-display font-bold text-lg">Informações Cadastrais</h2>
-              <Button variant="outline" size="sm" onClick={() => router.navigate({ to: "/pacientes" })}>
-                <Edit3 className="h-3.5 w-3.5 mr-2" /> Editar pelo modal
-              </Button>
-            </div>
-            
-            <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-y-6 gap-x-8 text-sm">
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Nome Completo</dt>
-                <dd className="font-medium">{patient.fullName}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Data de Nascimento</dt>
-                <dd className="font-medium">{patient.birthDate ? new Date(patient.birthDate).toLocaleDateString() : "-"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Idade</dt>
-                <dd className="font-medium">{age !== null ? `${age} anos` : "-"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">CPF</dt>
-                <dd className="font-medium">{patient.cpf || "-"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">RG</dt>
-                <dd className="font-medium">{patient.rg ? `${patient.rg} ${patient.issuingAgency || ""}` : "-"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Sexo</dt>
-                <dd className="font-medium">{patient.gender || "-"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Estado Civil</dt>
-                <dd className="font-medium">{patient.maritalStatus || "-"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Profissão</dt>
-                <dd className="font-medium">{patient.profession || "-"}</dd>
-              </div>
-              <div className="sm:col-span-2 md:col-span-3 pt-4 border-t border-border mt-2">
-                <dt className="text-muted-foreground text-xs font-semibold uppercase mb-1">Endereço</dt>
-                <dd className="font-medium">{patient.address || "Não informado"}</dd>
-              </div>
-            </div>
-          </Card>
+          <PatientPersonalDataTab
+            patient={patient}
+            onSave={async (updatedPatient) => {
+              await setPatients((current) =>
+                current.map((item) => (item.id === updatedPatient.id ? updatedPatient : item)),
+              );
+            }}
+          />
         )}
 
         {activeTab === "anamnese" && (
@@ -746,13 +990,18 @@ function PatientProfilePage() {
                 <ClipboardList className="h-5 w-5 text-gold" />
                 Histórico de Anamneses
               </h2>
-              <Button variant="gold" onClick={() => setAnamnesisDraft({
-                id: "",
-                patientId: patientId,
-                status: "rascunho",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-              } as Anamnesis)}>
+              <Button
+                variant="gold"
+                onClick={() =>
+                  setAnamnesisDraft({
+                    id: "",
+                    patientId: patientId,
+                    status: "rascunho",
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
+                  } as Anamnesis)
+                }
+              >
                 <Plus className="h-4 w-4 mr-2" /> Nova Anamnese
               </Button>
             </div>
@@ -775,28 +1024,44 @@ function PatientProfilePage() {
                 </div>
                 <h3 className="text-lg font-display font-semibold mb-1">Nenhuma anamnese</h3>
                 <p className="text-muted-foreground text-sm max-w-md mx-auto">
-                  Nenhuma anamnese cadastrada para este paciente. Clique no botão acima para preencher a primeira ficha clínica de saúde.
+                  Nenhuma anamnese cadastrada para este paciente. Clique no botão acima para
+                  preencher a primeira ficha clínica de saúde.
                 </p>
               </div>
             ) : (
               <div className="grid gap-4">
-                {anamneses.map(anamnesis => (
-                  <Card key={anamnesis.id} className="p-5 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                {anamneses.map((anamnesis) => (
+                  <Card
+                    key={anamnesis.id}
+                    className="p-5 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center"
+                  >
                     <div>
                       <div className="flex items-center gap-3 mb-1">
-                        <span className="font-semibold">{new Date(anamnesis.createdAt).toLocaleDateString()}</span>
-                        <Badge tone={
-                          anamnesis.status === "assinada" ? "ok" :
-                          anamnesis.status === "concluída" ? "gold" : "warn"
-                        }>
+                        <span className="font-semibold">
+                          {new Date(anamnesis.createdAt).toLocaleDateString()}
+                        </span>
+                        <Badge
+                          tone={
+                            anamnesis.status === "assinada"
+                              ? "ok"
+                              : anamnesis.status === "concluída"
+                                ? "gold"
+                                : "warn"
+                          }
+                        >
                           {anamnesis.status}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground line-clamp-1">
-                        <span className="font-medium">Queixa principal:</span> {anamnesis.mainComplaint || "Não informada"}
+                        <span className="font-medium">Queixa principal:</span>{" "}
+                        {anamnesis.mainComplaint || "Não informada"}
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={() => setAnamnesisDraft({...anamnesis})}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAnamnesisDraft({ ...anamnesis })}
+                    >
                       <Edit3 className="h-4 w-4 mr-2" /> Ver / Editar
                     </Button>
                   </Card>
@@ -812,39 +1077,40 @@ function PatientProfilePage() {
           </div>
         )}
 
-        {activeTab === "plano-tratamento" && (
-          <TreatmentPlanTab patientId={patient.id} />
-        )}
+        {activeTab === "plano-tratamento" && <TreatmentPlanTab patientId={patient.id} />}
 
-        {activeTab === "financeiro" && (
-          <FinanceTab patientId={patient.id} />
-        )}
+        {activeTab === "financeiro" && <FinanceTab patientId={patient.id} />}
 
-        {activeTab === "fotos-clinicas" && (
-          <ClinicalPhotosTab patientId={patient.id} />
-        )}
+        {activeTab === "fotos-clinicas" && <ClinicalPhotosTab patientId={patient.id} />}
 
-        {activeTab === "ficha-clinica" && (
-          <ClinicalRecordTab patientId={patient.id} />
-        )}
+        {activeTab === "ficha-clinica" && <ClinicalRecordTab patientId={patient.id} />}
 
-        {activeTab === "documentos" && (
-          <DocumentsTab patientId={patient.id} />
-        )}
+        {activeTab === "documentos" && <DocumentsTab patientId={patient.id} />}
 
-        {activeTab !== "resumo" && activeTab !== "dados-pessoais" && activeTab !== "anamnese" && activeTab !== "odontograma" && activeTab !== "plano-tratamento" && activeTab !== "financeiro" && activeTab !== "fotos-clinicas" && activeTab !== "ficha-clinica" && activeTab !== "documentos" && (
-          <div className="py-24 text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-secondary text-muted-foreground mb-4">
-              <Activity className="h-8 w-8 opacity-50" />
+        {activeTab !== "resumo" &&
+          activeTab !== "dados-pessoais" &&
+          activeTab !== "anamnese" &&
+          activeTab !== "odontograma" &&
+          activeTab !== "plano-tratamento" &&
+          activeTab !== "financeiro" &&
+          activeTab !== "fotos-clinicas" &&
+          activeTab !== "ficha-clinica" &&
+          activeTab !== "documentos" && (
+            <div className="py-24 text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-secondary text-muted-foreground mb-4">
+                <Activity className="h-8 w-8 opacity-50" />
+              </div>
+              <h3 className="text-xl font-display font-semibold mb-2">
+                {TAB_MAP[activeTab] || activeTab}
+              </h3>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                Este módulo estará disponível na próxima fase de desenvolvimento da plataforma.
+              </p>
+              <Badge tone="warn" className="mt-4">
+                Em breve
+              </Badge>
             </div>
-            <h3 className="text-xl font-display font-semibold mb-2">{TAB_MAP[activeTab] || activeTab}</h3>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              Este módulo estará disponível na próxima fase de desenvolvimento da plataforma.
-            </p>
-            <Badge tone="warn" className="mt-4">Em breve</Badge>
-          </div>
-        )}
-
+          )}
       </div>
     </AppLayout>
   );

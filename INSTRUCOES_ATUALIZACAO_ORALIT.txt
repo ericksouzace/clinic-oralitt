@@ -1,0 +1,83 @@
+ORALIT — ATUALIZAÇÃO DO FLUXO CLÍNICO E FINANCEIRO
+====================================================
+
+IMPORTANTE
+----------
+Antes de testar a aplicação, execute o SQL incluído neste pacote no Supabase.
+Ele adiciona a preferência de nota fiscal ao paciente e corrige os quatro status clínicos.
+
+1. ATUALIZAR O SUPABASE
+-----------------------
+Opção mais simples:
+
+1) Abra o painel do Supabase do projeto.
+2) Entre em SQL Editor.
+3) Clique em New query.
+4) Abra o arquivo EXECUTAR_NO_SUPABASE.sql deste pacote.
+5) Copie todo o conteúdo, cole no editor e clique em Run.
+
+O mesmo SQL também está em:
+supabase/migrations/20260727090000_patient_status_invoice_preference.sql
+
+2. SUBSTITUIR OS ARQUIVOS
+-------------------------
+No pacote de atualização rápida, copie os arquivos preservando exatamente estas pastas:
+
+src/components/finance/FinanceTab.tsx
+src/components/treatment-plan/TreatmentPlanTab.tsx
+src/components/clinical-record/ClinicalRecordTab.tsx
+src/components/patient/PatientPersonalDataTab.tsx
+src/routes/pacientes_.$patientId.tsx
+src/lib/budget-pdf.ts
+src/lib/db.ts
+src/lib/store.ts
+supabase/migrations/20260727090000_patient_status_invoice_preference.sql
+
+Arquivos que ainda não existem no projeto devem ser criados no caminho informado.
+Arquivos que já existem devem ser totalmente substituídos.
+
+3. TESTAR
+---------
+No terminal do Codespaces:
+
+npm run dev
+
+Confira:
+
+- Financeiro sem as antigas sub-abas.
+- Botão Adicionar pagamento.
+- Saldo = pagamentos recebidos - procedimentos realizados.
+- Saldo sempre visível no rodapé, no lugar de Total.
+- Nota fiscal Sim/Não vinculada ao paciente.
+- Marcação Realizado dentro do Plano de Tratamento.
+- Item fica verde sem atualizar a página ou trocar de aba.
+- Item realizado vai à Ficha Clínica mesmo com valor zero e sem dentes.
+- Item realizado aparece no extrato Financeiro.
+- Status do paciente dentro do Plano de Tratamento.
+- Dados pessoais editáveis diretamente na própria aba.
+- Orçamento pode ser visualizado, impresso e salvo em Documentos.
+
+Depois execute:
+
+npm run build
+
+4. PUBLICAR
+-----------
+Após confirmar o funcionamento:
+
+git add .
+git commit -m "Atualiza plano de tratamento e financeiro do Oralit"
+git push origin main
+
+RESULTADO DO TESTE DESTE PACOTE
+-------------------------------
+O build de produção foi executado e concluído com sucesso antes da criação do ZIP.
+
+REGRAS DO FLUXO IMPLEMENTADO
+----------------------------
+- Pagamento aumenta o saldo do paciente.
+- Procedimento realizado reduz o saldo.
+- Exemplo: pagamento R$ 1.000,00 e procedimento R$ 400,00 = saldo R$ 600,00.
+- Valor zero não impede o envio à Ficha Clínica.
+- Dente é opcional e não interfere na sincronização.
+- O botão Adicionar registro manual foi mantido na Ficha Clínica.

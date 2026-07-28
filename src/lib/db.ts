@@ -2,9 +2,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type {
-  Supply, FixedCost, Procedure, Settings, HistoryItem, Patient, PatientStatus, 
-  Anamnesis, AnamnesisStatus, OdontogramEntry, Appointment,
-  PatientFile, PatientFileType
+  Supply,
+  FixedCost,
+  Procedure,
+  Settings,
+  HistoryItem,
+  Patient,
+  PatientStatus,
+  Anamnesis,
+  AnamnesisStatus,
+  OdontogramEntry,
+  Appointment,
+  PatientFile,
+  PatientFileType,
+  TreatmentPlan,
+  TreatmentPlanItem,
+  ClinicalRecord,
+  ClinicalRecordSupply,
+  Budget,
+  BudgetItem,
+  PaymentInstallment,
+  Payment,
+  PaymentSplit,
 } from "@/lib/store";
 import { DEFAULT_SETTINGS } from "@/lib/store";
 
@@ -27,7 +46,10 @@ function logSupabaseError(context: string, error: any) {
 }
 
 export async function getCurrentUserOrThrow() {
-  const { data: { user }, error } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
   if (error || !user) {
     toast.error("Você precisa estar logado para realizar esta ação.");
     throw new Error("Not authenticated");
@@ -36,7 +58,10 @@ export async function getCurrentUserOrThrow() {
 }
 
 export async function getCurrentUser() {
-  const { data: { user }, error } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser();
   if (error || !user) return null;
   return user;
 }
@@ -95,7 +120,11 @@ function supplyToDb(s: Omit<Supply, "id">, userId: string) {
   };
 }
 
-export function useSupplies(): [Supply[], (v: Supply[] | ((p: Supply[]) => Supply[])) => Promise<void>, boolean] {
+export function useSupplies(): [
+  Supply[],
+  (v: Supply[] | ((p: Supply[]) => Supply[])) => Promise<void>,
+  boolean,
+] {
   const [items, setItems] = useState<Supply[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -120,52 +149,74 @@ export function useSupplies(): [Supply[], (v: Supply[] | ((p: Supply[]) => Suppl
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  const setter = useCallback(async (v: Supply[] | ((p: Supply[]) => Supply[])) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
+  const setter = useCallback(
+    async (v: Supply[] | ((p: Supply[]) => Supply[])) => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
 
-      const currentIds = new Set(items.map(i => i.id));
-      const nextIds = new Set(next.map(i => i.id));
+        const currentIds = new Set(items.map((i) => i.id));
+        const nextIds = new Set(next.map((i) => i.id));
 
-      for (const id of currentIds) {
-        if (!nextIds.has(id)) {
-          const { error } = await supabase.from("supplies").delete().eq("id", id).eq("user_id", user.id);
-          if (error) { logSupabaseError("supplies delete", error); throw error; }
-        }
-      }
-
-      for (const item of next) {
-        if (!currentIds.has(item.id)) {
-          const { data, error } = await supabase.from("supplies")
-            .insert({ ...supplyToDb(item, user.id) })
-            .select().single();
-          if (error) { logSupabaseError("supplies insert", error); throw error; }
-          item.id = (data as DbSupply).id;
-        }
-      }
-
-      for (const item of next) {
-        if (currentIds.has(item.id)) {
-          const orig = items.find(x => x.id === item.id);
-          if (JSON.stringify(orig) !== JSON.stringify(item)) {
-            const { error } = await supabase.from("supplies")
-              .update(supplyToDb(item, user.id))
-              .eq("id", item.id).eq("user_id", user.id);
-            if (error) { logSupabaseError("supplies update", error); throw error; }
+        for (const id of currentIds) {
+          if (!nextIds.has(id)) {
+            const { error } = await supabase
+              .from("supplies")
+              .delete()
+              .eq("id", id)
+              .eq("user_id", user.id);
+            if (error) {
+              logSupabaseError("supplies delete", error);
+              throw error;
+            }
           }
         }
+
+        for (const item of next) {
+          if (!currentIds.has(item.id)) {
+            const { data, error } = await supabase
+              .from("supplies")
+              .insert({ ...supplyToDb(item, user.id) })
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError("supplies insert", error);
+              throw error;
+            }
+            item.id = (data as DbSupply).id;
+          }
+        }
+
+        for (const item of next) {
+          if (currentIds.has(item.id)) {
+            const orig = items.find((x) => x.id === item.id);
+            if (JSON.stringify(orig) !== JSON.stringify(item)) {
+              const { error } = await supabase
+                .from("supplies")
+                .update(supplyToDb(item, user.id))
+                .eq("id", item.id)
+                .eq("user_id", user.id);
+              if (error) {
+                logSupabaseError("supplies update", error);
+                throw error;
+              }
+            }
+          }
+        }
+        setItems([...next]);
+      } catch (e: any) {
+        toast.error("Erro ao sincronizar insumos com o Supabase.");
+      } finally {
+        setLoading(false);
       }
-      setItems([...next]);
-    } catch (e: any) {
-      toast.error("Erro ao sincronizar insumos com o Supabase.");
-    } finally {
-      setLoading(false);
-    }
-  }, [items]);
+    },
+    [items],
+  );
 
   return [items, setter, loading];
 }
@@ -195,11 +246,15 @@ function fixedCostToDb(c: Omit<FixedCost, "id">, userId: string) {
     name: strOrNull(c.name) ?? "Sem nome",
     category: null,
     amount: Number(c.value || 0),
-    notes: null
+    notes: null,
   };
 }
 
-export function useFixedCosts(): [FixedCost[], (v: FixedCost[] | ((p: FixedCost[]) => FixedCost[])) => Promise<void>, boolean] {
+export function useFixedCosts(): [
+  FixedCost[],
+  (v: FixedCost[] | ((p: FixedCost[]) => FixedCost[])) => Promise<void>,
+  boolean,
+] {
   const [items, setItems] = useState<FixedCost[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -212,57 +267,85 @@ export function useFixedCosts(): [FixedCost[], (v: FixedCost[] | ((p: FixedCost[
         .select("*")
         .eq("user_id", user.id)
         .order("name");
-      if (error) { logSupabaseError("fixed_costs load", error); throw error; }
+      if (error) {
+        logSupabaseError("fixed_costs load", error);
+        throw error;
+      }
       if (data) setItems((data as DbFixedCost[]).map(dbToFixedCost));
-    } catch (e: any) {} finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setter = useCallback(async (v: FixedCost[] | ((p: FixedCost[]) => FixedCost[])) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
-
-      const currentIds = new Set(items.map(i => i.id));
-      const nextIds = new Set(next.map(i => i.id));
-
-      for (const id of currentIds) {
-        if (!nextIds.has(id)) {
-          const { error } = await supabase.from("fixed_costs").delete().eq("id", id).eq("user_id", user.id);
-          if (error) { logSupabaseError("fixed_costs delete", error); throw error; }
-        }
-      }
-
-      for (const item of next) {
-        if (!currentIds.has(item.id)) {
-          const { data, error } = await supabase.from("fixed_costs")
-            .insert(fixedCostToDb(item, user.id))
-            .select().single();
-          if (error) { logSupabaseError("fixed_costs insert", error); throw error; }
-          item.id = (data as DbFixedCost).id;
-        }
-      }
-
-      for (const item of next) {
-        if (currentIds.has(item.id)) {
-          const orig = items.find(x => x.id === item.id);
-          if (JSON.stringify(orig) !== JSON.stringify(item)) {
-            const { error } = await supabase.from("fixed_costs")
-              .update(fixedCostToDb(item, user.id))
-              .eq("id", item.id).eq("user_id", user.id);
-            if (error) { logSupabaseError("fixed_costs update", error); throw error; }
-          }
-        }
-      }
-      setItems([...next]);
     } catch (e: any) {
-      toast.error("Erro ao sincronizar custos fixos.");
     } finally {
       setLoading(false);
     }
-  }, [items]);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setter = useCallback(
+    async (v: FixedCost[] | ((p: FixedCost[]) => FixedCost[])) => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
+
+        const currentIds = new Set(items.map((i) => i.id));
+        const nextIds = new Set(next.map((i) => i.id));
+
+        for (const id of currentIds) {
+          if (!nextIds.has(id)) {
+            const { error } = await supabase
+              .from("fixed_costs")
+              .delete()
+              .eq("id", id)
+              .eq("user_id", user.id);
+            if (error) {
+              logSupabaseError("fixed_costs delete", error);
+              throw error;
+            }
+          }
+        }
+
+        for (const item of next) {
+          if (!currentIds.has(item.id)) {
+            const { data, error } = await supabase
+              .from("fixed_costs")
+              .insert(fixedCostToDb(item, user.id))
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError("fixed_costs insert", error);
+              throw error;
+            }
+            item.id = (data as DbFixedCost).id;
+          }
+        }
+
+        for (const item of next) {
+          if (currentIds.has(item.id)) {
+            const orig = items.find((x) => x.id === item.id);
+            if (JSON.stringify(orig) !== JSON.stringify(item)) {
+              const { error } = await supabase
+                .from("fixed_costs")
+                .update(fixedCostToDb(item, user.id))
+                .eq("id", item.id)
+                .eq("user_id", user.id);
+              if (error) {
+                logSupabaseError("fixed_costs update", error);
+                throw error;
+              }
+            }
+          }
+        }
+        setItems([...next]);
+      } catch (e: any) {
+        toast.error("Erro ao sincronizar custos fixos.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [items],
+  );
 
   return [items, setter, loading];
 }
@@ -310,13 +393,22 @@ function procedureToDb(p: Omit<Procedure, "id">, userId: string) {
     lab_cost: Number(p.labCost || 0),
     other_direct_costs: Number(p.otherDirect || 0),
     desired_margin: null,
-    suggested_price: p.suggestedPrice != null ? Number(p.suggestedPrice) : (p.suggestedPricePix != null ? Number(p.suggestedPricePix) : null),
+    suggested_price:
+      p.suggestedPrice != null
+        ? Number(p.suggestedPrice)
+        : p.suggestedPricePix != null
+          ? Number(p.suggestedPricePix)
+          : null,
     notes: strOrNull(p.note),
     status: null,
   };
 }
 
-export function useProcedures(): [Procedure[], (v: Procedure[] | ((p: Procedure[]) => Procedure[])) => Promise<void>, boolean] {
+export function useProcedures(): [
+  Procedure[],
+  (v: Procedure[] | ((p: Procedure[]) => Procedure[])) => Promise<void>,
+  boolean,
+] {
   const [items, setItems] = useState<Procedure[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -329,57 +421,85 @@ export function useProcedures(): [Procedure[], (v: Procedure[] | ((p: Procedure[
         .select("*")
         .eq("user_id", user.id)
         .order("name");
-      if (error) { logSupabaseError("procedures load", error); throw error; }
+      if (error) {
+        logSupabaseError("procedures load", error);
+        throw error;
+      }
       if (data) setItems((data as DbProcedure[]).map(dbToProcedure));
-    } catch (e: any) {} finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setter = useCallback(async (v: Procedure[] | ((p: Procedure[]) => Procedure[])) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
-
-      const currentIds = new Set(items.map(i => i.id));
-      const nextIds = new Set(next.map(i => i.id));
-
-      for (const id of currentIds) {
-        if (!nextIds.has(id)) {
-          const { error } = await supabase.from("procedures").delete().eq("id", id).eq("user_id", user.id);
-          if (error) { logSupabaseError("procedures delete", error); throw error; }
-        }
-      }
-
-      for (const item of next) {
-        if (!currentIds.has(item.id)) {
-          const { data, error } = await supabase.from("procedures")
-            .insert(procedureToDb(item, user.id))
-            .select().single();
-          if (error) { logSupabaseError("procedures insert", error); throw error; }
-          item.id = (data as DbProcedure).id;
-        }
-      }
-
-      for (const item of next) {
-        if (currentIds.has(item.id)) {
-          const orig = items.find(x => x.id === item.id);
-          if (JSON.stringify(orig) !== JSON.stringify(item)) {
-            const { error } = await supabase.from("procedures")
-              .update(procedureToDb(item, user.id))
-              .eq("id", item.id).eq("user_id", user.id);
-            if (error) { logSupabaseError("procedures update", error); throw error; }
-          }
-        }
-      }
-      setItems([...next]);
     } catch (e: any) {
-      toast.error("Erro ao sincronizar procedimentos.");
     } finally {
       setLoading(false);
     }
-  }, [items]);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setter = useCallback(
+    async (v: Procedure[] | ((p: Procedure[]) => Procedure[])) => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
+
+        const currentIds = new Set(items.map((i) => i.id));
+        const nextIds = new Set(next.map((i) => i.id));
+
+        for (const id of currentIds) {
+          if (!nextIds.has(id)) {
+            const { error } = await supabase
+              .from("procedures")
+              .delete()
+              .eq("id", id)
+              .eq("user_id", user.id);
+            if (error) {
+              logSupabaseError("procedures delete", error);
+              throw error;
+            }
+          }
+        }
+
+        for (const item of next) {
+          if (!currentIds.has(item.id)) {
+            const { data, error } = await supabase
+              .from("procedures")
+              .insert(procedureToDb(item, user.id))
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError("procedures insert", error);
+              throw error;
+            }
+            item.id = (data as DbProcedure).id;
+          }
+        }
+
+        for (const item of next) {
+          if (currentIds.has(item.id)) {
+            const orig = items.find((x) => x.id === item.id);
+            if (JSON.stringify(orig) !== JSON.stringify(item)) {
+              const { error } = await supabase
+                .from("procedures")
+                .update(procedureToDb(item, user.id))
+                .eq("id", item.id)
+                .eq("user_id", user.id);
+              if (error) {
+                logSupabaseError("procedures update", error);
+                throw error;
+              }
+            }
+          }
+        }
+        setItems([...next]);
+      } catch (e: any) {
+        toast.error("Erro ao sincronizar procedimentos.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [items],
+  );
 
   return [items, setter, loading];
 }
@@ -433,7 +553,11 @@ function settingsToDb(s: Settings, userId: string) {
   };
 }
 
-export function useSettings(): [Settings, (v: Settings | ((p: Settings) => Settings)) => Promise<void>, boolean] {
+export function useSettings(): [
+  Settings,
+  (v: Settings | ((p: Settings) => Settings)) => Promise<void>,
+  boolean,
+] {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const rowIdRef = useRef<string | null>(null);
@@ -442,69 +566,95 @@ export function useSettings(): [Settings, (v: Settings | ((p: Settings) => Setti
     try {
       const user = await getCurrentUser();
       if (!user) return;
-      const { data, error } = await supabase.from("settings")
+      const { data, error } = await supabase
+        .from("settings")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(1);
-        
-      if (error) { logSupabaseError("settings load", error); throw error; }
+
+      if (error) {
+        logSupabaseError("settings load", error);
+        throw error;
+      }
 
       if (!data || data.length === 0) {
-        const { data: created, error: createErr } = await supabase.from("settings")
+        const { data: created, error: createErr } = await supabase
+          .from("settings")
           .insert(settingsToDb(DEFAULT_SETTINGS, user.id))
-          .select().single();
-        if (createErr) { logSupabaseError("settings create", createErr); throw createErr; }
+          .select()
+          .single();
+        if (createErr) {
+          logSupabaseError("settings create", createErr);
+          throw createErr;
+        }
         rowIdRef.current = (created as DbSettings).id;
         setSettings(dbToSettings(created as DbSettings));
       } else {
         rowIdRef.current = (data[0] as DbSettings).id;
         setSettings(dbToSettings(data[0] as DbSettings));
       }
-    } catch (e: any) {} finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setter = useCallback(async (v: Settings | ((p: Settings) => Settings)) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(settings) : v;
-      
-      let targetId = rowIdRef.current;
-      if (!targetId) {
-         const { data: existing } = await supabase.from("settings").select("id").eq("user_id", user.id).limit(1);
-         if (existing && existing.length > 0) {
-           targetId = existing[0].id;
-           rowIdRef.current = targetId;
-         }
-      }
-
-      const payload = settingsToDb(next, user.id);
-
-      if (targetId) {
-        const { error } = await supabase.from("settings")
-          .update(payload)
-          .eq("id", targetId)
-          .eq("user_id", user.id);
-        if (error) { logSupabaseError("settings update", error); throw error; }
-      } else {
-        const { data, error } = await supabase.from("settings")
-          .insert(payload)
-          .select().single();
-        if (error) { logSupabaseError("settings insert fallback", error); throw error; }
-        rowIdRef.current = (data as DbSettings).id;
-      }
-      
-      setSettings(next);
     } catch (e: any) {
-      toast.error("Erro ao salvar configurações no Supabase.");
-      throw e;
     } finally {
       setLoading(false);
     }
-  }, [settings]);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setter = useCallback(
+    async (v: Settings | ((p: Settings) => Settings)) => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(settings) : v;
+
+        let targetId = rowIdRef.current;
+        if (!targetId) {
+          const { data: existing } = await supabase
+            .from("settings")
+            .select("id")
+            .eq("user_id", user.id)
+            .limit(1);
+          if (existing && existing.length > 0) {
+            targetId = existing[0].id;
+            rowIdRef.current = targetId;
+          }
+        }
+
+        const payload = settingsToDb(next, user.id);
+
+        if (targetId) {
+          const { error } = await supabase
+            .from("settings")
+            .update(payload)
+            .eq("id", targetId)
+            .eq("user_id", user.id);
+          if (error) {
+            logSupabaseError("settings update", error);
+            throw error;
+          }
+        } else {
+          const { data, error } = await supabase.from("settings").insert(payload).select().single();
+          if (error) {
+            logSupabaseError("settings insert fallback", error);
+            throw error;
+          }
+          rowIdRef.current = (data as DbSettings).id;
+        }
+
+        setSettings(next);
+      } catch (e: any) {
+        toast.error("Erro ao salvar configurações no Supabase.");
+        throw e;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [settings],
+  );
 
   return [settings, setter, loading];
 }
@@ -578,7 +728,11 @@ function historyToDb(h: HistoryItem, userId: string) {
   };
 }
 
-export function useHistory(): [HistoryItem[], (v: HistoryItem[] | ((p: HistoryItem[]) => HistoryItem[])) => Promise<void>, boolean] {
+export function useHistory(): [
+  HistoryItem[],
+  (v: HistoryItem[] | ((p: HistoryItem[]) => HistoryItem[])) => Promise<void>,
+  boolean,
+] {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -586,47 +740,74 @@ export function useHistory(): [HistoryItem[], (v: HistoryItem[] | ((p: HistoryIt
     try {
       const user = await getCurrentUser();
       if (!user) return;
-      const { data, error } = await supabase.from("pricing_history").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
-      if (error) { logSupabaseError("pricing_history load", error); throw error; }
+      const { data, error } = await supabase
+        .from("pricing_history")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) {
+        logSupabaseError("pricing_history load", error);
+        throw error;
+      }
       if (data) setItems((data as DbHistory[]).map(dbToHistory));
-    } catch (e: any) {} finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setter = useCallback(async (v: HistoryItem[] | ((p: HistoryItem[]) => HistoryItem[])) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
-
-      const currentIds = new Set(items.map(i => i.id));
-      const nextIds = new Set(next.map(i => i.id));
-
-      for (const id of currentIds) {
-        if (!nextIds.has(id)) {
-          const { error } = await supabase.from("pricing_history").delete().eq("id", id).eq("user_id", user.id);
-          if (error) { logSupabaseError("pricing_history delete", error); throw error; }
-        }
-      }
-
-      for (const item of next) {
-        if (!currentIds.has(item.id)) {
-          const { data, error } = await supabase.from("pricing_history")
-            .insert(historyToDb(item, user.id))
-            .select().single();
-          if (error) { logSupabaseError("pricing_history insert", error); throw error; }
-          item.id = (data as DbHistory).id;
-        }
-      }
-
-      setItems([...next]);
     } catch (e: any) {
-      toast.error("Erro ao sincronizar histórico.");
     } finally {
       setLoading(false);
     }
-  }, [items]);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setter = useCallback(
+    async (v: HistoryItem[] | ((p: HistoryItem[]) => HistoryItem[])) => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
+
+        const currentIds = new Set(items.map((i) => i.id));
+        const nextIds = new Set(next.map((i) => i.id));
+
+        for (const id of currentIds) {
+          if (!nextIds.has(id)) {
+            const { error } = await supabase
+              .from("pricing_history")
+              .delete()
+              .eq("id", id)
+              .eq("user_id", user.id);
+            if (error) {
+              logSupabaseError("pricing_history delete", error);
+              throw error;
+            }
+          }
+        }
+
+        for (const item of next) {
+          if (!currentIds.has(item.id)) {
+            const { data, error } = await supabase
+              .from("pricing_history")
+              .insert(historyToDb(item, user.id))
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError("pricing_history insert", error);
+              throw error;
+            }
+            item.id = (data as DbHistory).id;
+          }
+        }
+
+        setItems([...next]);
+      } catch (e: any) {
+        toast.error("Erro ao sincronizar histórico.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [items],
+  );
 
   return [items, setter, loading];
 }
@@ -652,51 +833,79 @@ function useCategoryType(type: "supply_category" | "procedure_category" | "fixed
     try {
       const user = await getCurrentUser();
       if (!user) return;
-      const { data, error } = await supabase.from("custom_categories").select("*").eq("user_id", user.id).eq("type", type).order("name");
-      if (error) { logSupabaseError(`custom_categories load ${type}`, error); throw error; }
+      const { data, error } = await supabase
+        .from("custom_categories")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("type", type)
+        .order("name");
+      if (error) {
+        logSupabaseError(`custom_categories load ${type}`, error);
+        throw error;
+      }
       if (data) {
         const rows = data as DbCustomCategory[];
-        rows.forEach(r => idsRef.current.set(r.name, r.id));
-        setItems(rows.map(r => r.name));
+        rows.forEach((r) => idsRef.current.set(r.name, r.id));
+        setItems(rows.map((r) => r.name));
       }
-    } catch (e: any) {} finally { setLoading(false); }
-  }, [type]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setter = useCallback(async (v: string[] | ((p: string[]) => string[])) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
-
-      for (const name of next) {
-        if (!idsRef.current.has(name)) {
-          const { data, error } = await supabase.from("custom_categories")
-            .insert({ user_id: user.id, type, name: strOrNull(name) ?? "Categoria" })
-            .select().single();
-          if (error) { logSupabaseError(`custom_categories insert ${type}`, error); throw error; }
-          idsRef.current.set(name, (data as DbCustomCategory).id);
-        }
-      }
-
-      for (const name of items) {
-        if (!next.includes(name)) {
-          const id = idsRef.current.get(name);
-          if (id) {
-            const { error } = await supabase.from("custom_categories").delete().eq("id", id).eq("user_id", user.id);
-            if (error) { logSupabaseError(`custom_categories delete ${type}`, error); throw error; }
-            idsRef.current.delete(name);
-          }
-        }
-      }
-      setItems([...next]);
     } catch (e: any) {
-      toast.error(`Erro ao sincronizar categorias (${type}).`);
     } finally {
       setLoading(false);
     }
-  }, [items, type]);
+  }, [type]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setter = useCallback(
+    async (v: string[] | ((p: string[]) => string[])) => {
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
+
+        for (const name of next) {
+          if (!idsRef.current.has(name)) {
+            const { data, error } = await supabase
+              .from("custom_categories")
+              .insert({ user_id: user.id, type, name: strOrNull(name) ?? "Categoria" })
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError(`custom_categories insert ${type}`, error);
+              throw error;
+            }
+            idsRef.current.set(name, (data as DbCustomCategory).id);
+          }
+        }
+
+        for (const name of items) {
+          if (!next.includes(name)) {
+            const id = idsRef.current.get(name);
+            if (id) {
+              const { error } = await supabase
+                .from("custom_categories")
+                .delete()
+                .eq("id", id)
+                .eq("user_id", user.id);
+              if (error) {
+                logSupabaseError(`custom_categories delete ${type}`, error);
+                throw error;
+              }
+              idsRef.current.delete(name);
+            }
+          }
+        }
+        setItems([...next]);
+      } catch (e: any) {
+        toast.error(`Erro ao sincronizar categorias (${type}).`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [items, type],
+  );
 
   return [items, setter, loading] as const;
 }
@@ -723,6 +932,7 @@ type DbPatient = {
   address: string | null;
   administrative_notes: string | null;
   status: string;
+  invoice_preference: boolean | null;
   created_at: string;
   updated_at: string;
 };
@@ -731,7 +941,8 @@ function dbToPatient(r: DbPatient): Patient {
   return {
     id: r.id,
     recordNumber: r.record_number ?? "",
-    fullName: r.full_name || "Sem nome", referenceNote: r.reference_note ?? "",
+    fullName: r.full_name || "Sem nome",
+    referenceNote: r.reference_note ?? "",
     cpf: r.cpf ?? "",
     rg: r.rg ?? "",
     issuingAgency: r.issuing_agency ?? "",
@@ -743,8 +954,9 @@ function dbToPatient(r: DbPatient): Patient {
     whatsapp: r.whatsapp ?? "",
     address: r.address ?? "",
     administrativeNotes: r.administrative_notes ?? "",
-    status: (r.status as PatientStatus) || "ativo",
-    createdAt: r.created_at
+    status: (r.status as PatientStatus) || "em tratamento",
+    invoicePreference: r.invoice_preference ?? null,
+    createdAt: r.created_at,
   };
 }
 
@@ -752,7 +964,8 @@ function patientToDb(p: Partial<Patient>, userId: string) {
   return {
     user_id: userId,
     record_number: strOrNull(p.recordNumber),
-    full_name: p.fullName || "Sem nome", reference_note: strOrNull(p.referenceNote),
+    full_name: p.fullName || "Sem nome",
+    reference_note: strOrNull(p.referenceNote),
     cpf: strOrNull(p.cpf),
     rg: strOrNull(p.rg),
     issuing_agency: strOrNull(p.issuingAgency),
@@ -764,7 +977,8 @@ function patientToDb(p: Partial<Patient>, userId: string) {
     whatsapp: strOrNull(p.whatsapp),
     address: strOrNull(p.address),
     administrative_notes: strOrNull(p.administrativeNotes),
-    status: p.status || "ativo",
+    status: p.status || "em tratamento",
+    invoice_preference: p.invoicePreference ?? null,
   };
 }
 
@@ -775,14 +989,19 @@ export interface CustomStatusType {
   description?: string;
 }
 
-export function usePatients(): [Patient[], (v: Patient[] | ((p: Patient[]) => Patient[])) => Promise<void>, boolean, string | null] {
+export function usePatients(): [
+  Patient[],
+  (v: Patient[] | ((p: Patient[]) => Patient[])) => Promise<void>,
+  boolean,
+  string | null,
+] {
   const [items, setItems] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorState, setErrorState] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setErrorState(null);
       const user = await getCurrentUser();
       if (!user) {
@@ -794,69 +1013,99 @@ export function usePatients(): [Patient[], (v: Patient[] | ((p: Patient[]) => Pa
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
-      
-      if (error) { 
-        logSupabaseError("patients load", error); 
+
+      if (error) {
+        logSupabaseError("patients load", error);
         setErrorState(error.message || "Erro desconhecido ao carregar pacientes.");
-        throw error; 
+        throw error;
       }
-      
+
       if (data) setItems((data as DbPatient[]).map(dbToPatient));
     } catch (e: any) {
-    } finally { 
-      setLoading(false); 
+    } finally {
+      if (!silent) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    void load(false);
+    if (typeof window === "undefined") return;
+    const handlePatientsChanged = () => {
+      void load(true);
+    };
+    window.addEventListener("oralit:patients-changed", handlePatientsChanged);
+    return () => window.removeEventListener("oralit:patients-changed", handlePatientsChanged);
+  }, [load]);
 
-  const setter = useCallback(async (v: Patient[] | ((p: Patient[]) => Patient[])) => {
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
+  const setter = useCallback(
+    async (v: Patient[] | ((p: Patient[]) => Patient[])) => {
+      try {
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
 
-      const currentIds = new Set(items.map(i => i.id));
-      const nextIds = new Set(next.map(i => i.id));
+        const currentIds = new Set(items.map((i) => i.id));
+        const nextIds = new Set(next.map((i) => i.id));
 
-      for (const id of currentIds) {
-        if (!nextIds.has(id)) {
-          const { error } = await supabase.from("patients").delete().eq("id", id).eq("user_id", user.id);
-          if (error) { logSupabaseError("patients delete", error); throw error; }
-        }
-      }
-
-      for (const item of next) {
-        if (!currentIds.has(item.id)) {
-          const { data, error } = await supabase.from("patients")
-            .insert(patientToDb(item, user.id))
-            .select().single();
-          if (error) { logSupabaseError("patients insert", error); throw error; }
-          item.id = (data as DbPatient).id;
-          item.createdAt = (data as DbPatient).created_at;
-        }
-      }
-
-      for (const item of next) {
-        if (currentIds.has(item.id)) {
-          const orig = items.find(x => x.id === item.id);
-          if (JSON.stringify(orig) !== JSON.stringify(item)) {
-            const { error } = await supabase.from("patients")
-              .update(patientToDb(item, user.id))
-              .eq("id", item.id).eq("user_id", user.id);
-            if (error) { logSupabaseError("patients update", error); throw error; }
+        for (const id of currentIds) {
+          if (!nextIds.has(id)) {
+            const { error } = await supabase
+              .from("patients")
+              .delete()
+              .eq("id", id)
+              .eq("user_id", user.id);
+            if (error) {
+              logSupabaseError("patients delete", error);
+              throw error;
+            }
           }
         }
+
+        for (const item of next) {
+          if (!currentIds.has(item.id)) {
+            const { data, error } = await supabase
+              .from("patients")
+              .insert(patientToDb(item, user.id))
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError("patients insert", error);
+              throw error;
+            }
+            item.id = (data as DbPatient).id;
+            item.createdAt = (data as DbPatient).created_at;
+          }
+        }
+
+        for (const item of next) {
+          if (currentIds.has(item.id)) {
+            const orig = items.find((x) => x.id === item.id);
+            if (JSON.stringify(orig) !== JSON.stringify(item)) {
+              const { error } = await supabase
+                .from("patients")
+                .update(patientToDb(item, user.id))
+                .eq("id", item.id)
+                .eq("user_id", user.id);
+              if (error) {
+                logSupabaseError("patients update", error);
+                throw error;
+              }
+            }
+          }
+        }
+
+        setItems([...next]);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("oralit:patients-changed"));
+        }
+      } catch (e: any) {
+        toast.error("Erro ao sincronizar pacientes.");
+        throw e;
+      } finally {
+        // Mantém a tela atual aberta durante alterações pontuais do paciente.
       }
-      
-      setItems([...next]);
-    } catch (e: any) {
-      toast.error("Erro ao sincronizar pacientes.");
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [items]);
+    },
+    [items],
+  );
 
   return [items, setter, loading, errorState];
 }
@@ -936,30 +1185,51 @@ export function useAnamneses(patientId: string) {
       if (!user) throw new Error("Usuário não autenticado");
       const next = typeof action === "function" ? action(items) : action;
 
-      const added = next.filter(n => !items.find(i => i.id === n.id));
-      const removed = items.filter(i => !next.find(n => n.id === i.id));
-      const updated = next.filter(n => {
-        const old = items.find(i => i.id === n.id);
+      const added = next.filter((n) => !items.find((i) => i.id === n.id));
+      const removed = items.filter((i) => !next.find((n) => n.id === i.id));
+      const updated = next.filter((n) => {
+        const old = items.find((i) => i.id === n.id);
         return old && JSON.stringify(old) !== JSON.stringify(n);
       });
 
       if (added.length > 0) {
-        const { error } = await supabase.from("anamneses").insert(added.map(a => anamnesisToDb(a, user.id)));
-        if (error) { logSupabaseError("Insert Anamnesis", error); throw error; }
+        const { error } = await supabase
+          .from("anamneses")
+          .insert(added.map((a) => anamnesisToDb(a, user.id)));
+        if (error) {
+          logSupabaseError("Insert Anamnesis", error);
+          throw error;
+        }
       }
       if (removed.length > 0) {
         for (const r of removed) {
-          const { error } = await supabase.from("anamneses").delete().eq("id", r.id).eq("user_id", user.id).eq("patient_id", patientId);
-          if (error) { logSupabaseError("Delete Anamnesis", error); throw error; }
+          const { error } = await supabase
+            .from("anamneses")
+            .delete()
+            .eq("id", r.id)
+            .eq("user_id", user.id)
+            .eq("patient_id", patientId);
+          if (error) {
+            logSupabaseError("Delete Anamnesis", error);
+            throw error;
+          }
         }
       }
       if (updated.length > 0) {
         for (const u of updated) {
-          const { error } = await supabase.from("anamneses").update({
-            ...anamnesisToDb(u, user.id),
-            updated_at: new Date().toISOString()
-          }).eq("id", u.id).eq("user_id", user.id).eq("patient_id", patientId);
-          if (error) { logSupabaseError("Update Anamnesis", error); throw error; }
+          const { error } = await supabase
+            .from("anamneses")
+            .update({
+              ...anamnesisToDb(u, user.id),
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", u.id)
+            .eq("user_id", user.id)
+            .eq("patient_id", patientId);
+          if (error) {
+            logSupabaseError("Update Anamnesis", error);
+            throw error;
+          }
         }
       }
       setItems(next);
@@ -978,12 +1248,16 @@ export function useAnamneses(patientId: string) {
         setLoading(true);
         const user = await getCurrentUser();
         if (!user || !patientId) return;
-        const { data, error } = await supabase.from("anamneses")
+        const { data, error } = await supabase
+          .from("anamneses")
           .select("*")
           .eq("user_id", user.id)
           .eq("patient_id", patientId)
           .order("created_at", { ascending: false });
-        if (error) { logSupabaseError("Fetch Anamneses", error); throw error; }
+        if (error) {
+          logSupabaseError("Fetch Anamneses", error);
+          throw error;
+        }
         if (active && data) setItems(data.map(dbToAnamnesis));
       } catch (e: any) {
         console.error(e);
@@ -993,7 +1267,9 @@ export function useAnamneses(patientId: string) {
       }
     };
     fetchItems();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId]);
 
   return [items, setter, loading, errorState] as const;
@@ -1062,23 +1338,36 @@ export function useOdontogramEntries(patientId: string) {
       if (!user) throw new Error("Usuário não autenticado");
       const next = typeof action === "function" ? action(items) : action;
 
-      const added = next.filter(n => !items.find(i => i.id === n.id));
-      const removed = items.filter(i => !next.find(n => n.id === i.id));
-      const updated = next.filter(n => {
-        const old = items.find(i => i.id === n.id);
+      const added = next.filter((n) => !items.find((i) => i.id === n.id));
+      const removed = items.filter((i) => !next.find((n) => n.id === i.id));
+      const updated = next.filter((n) => {
+        const old = items.find((i) => i.id === n.id);
         return old && JSON.stringify(old) !== JSON.stringify(n);
       });
 
       if (added.length > 0) {
-        const { error } = await supabase.from("odontogram_entries").insert(added.map(a => odontogramToDb(a, user.id)));
-        if (error) { logSupabaseError("Insert Odontogram", error); throw error; }
+        const { error } = await supabase
+          .from("odontogram_entries")
+          .insert(added.map((a) => odontogramToDb(a, user.id)));
+        if (error) {
+          logSupabaseError("Insert Odontogram", error);
+          throw error;
+        }
       }
       if (removed.length > 0) {
         for (const r of removed) {
           const cleanId = cleanUuid(r.id);
           if (cleanId) {
-            const { error } = await supabase.from("odontogram_entries").delete().eq("id", cleanId).eq("user_id", user.id).eq("patient_id", patientId);
-            if (error) { logSupabaseError("Delete Odontogram", error); throw error; }
+            const { error } = await supabase
+              .from("odontogram_entries")
+              .delete()
+              .eq("id", cleanId)
+              .eq("user_id", user.id)
+              .eq("patient_id", patientId);
+            if (error) {
+              logSupabaseError("Delete Odontogram", error);
+              throw error;
+            }
           }
         }
       }
@@ -1086,22 +1375,31 @@ export function useOdontogramEntries(patientId: string) {
         for (const u of updated) {
           const cleanId = cleanUuid(u.id);
           if (cleanId) {
-            const { error } = await supabase.from("odontogram_entries").update({
-              ...odontogramToDb(u, user.id),
-              updated_at: new Date().toISOString()
-            }).eq("id", cleanId).eq("user_id", user.id).eq("patient_id", patientId);
-            if (error) { logSupabaseError("Update Odontogram", error); throw error; }
+            const { error } = await supabase
+              .from("odontogram_entries")
+              .update({
+                ...odontogramToDb(u, user.id),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", cleanId)
+              .eq("user_id", user.id)
+              .eq("patient_id", patientId);
+            if (error) {
+              logSupabaseError("Update Odontogram", error);
+              throw error;
+            }
           }
         }
       }
-      
+
       // Re-fetch to replace temporary IDs with real database UUIDs
-      const { data } = await supabase.from("odontogram_entries")
-          .select("*")
-          .eq("user_id", user.id)
-          .eq("patient_id", patientId)
-          .order("created_at", { ascending: false });
-      
+      const { data } = await supabase
+        .from("odontogram_entries")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("patient_id", patientId)
+        .order("created_at", { ascending: false });
+
       if (data) {
         setItems(data.map(dbToOdontogram));
       } else {
@@ -1122,12 +1420,16 @@ export function useOdontogramEntries(patientId: string) {
         setLoading(true);
         const user = await getCurrentUser();
         if (!user || !patientId) return;
-        const { data, error } = await supabase.from("odontogram_entries")
+        const { data, error } = await supabase
+          .from("odontogram_entries")
           .select("*")
           .eq("user_id", user.id)
           .eq("patient_id", patientId)
           .order("created_at", { ascending: false });
-        if (error) { logSupabaseError("Fetch Odontogram", error); throw error; }
+        if (error) {
+          logSupabaseError("Fetch Odontogram", error);
+          throw error;
+        }
         if (active && data) setItems(data.map(dbToOdontogram));
       } catch (e: any) {
         console.error(e);
@@ -1137,7 +1439,9 @@ export function useOdontogramEntries(patientId: string) {
       }
     };
     fetchItems();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId]);
 
   return [items, setter, loading, errorState] as const;
@@ -1152,11 +1456,11 @@ export function useOdontogramStatusTypes() {
       const user = await getCurrentUser();
       if (!user) return;
       const { data, error } = await supabase
-        .from('odontogram_status_types')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name');
-        
+        .from("odontogram_status_types")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("name");
+
       if (error) {
         logSupabaseError("Fetch Status Types", error);
         setError(error.message);
@@ -1169,18 +1473,20 @@ export function useOdontogramStatusTypes() {
     }
   }, []);
 
-  useEffect(() => { fetchTypes(); }, [fetchTypes]);
+  useEffect(() => {
+    fetchTypes();
+  }, [fetchTypes]);
 
-  const addType = async (type: Omit<CustomStatusType, 'id'>) => {
+  const addType = async (type: Omit<CustomStatusType, "id">) => {
     const user = await getCurrentUserOrThrow();
-    const { error } = await supabase
-      .from('odontogram_status_types')
-      .insert([{
+    const { error } = await supabase.from("odontogram_status_types").insert([
+      {
         user_id: user.id,
         name: type.name,
         color: type.color,
         description: type.description,
-      }]);
+      },
+    ]);
 
     if (error) {
       logSupabaseError("Insert Status Type", error);
@@ -1192,9 +1498,15 @@ export function useOdontogramStatusTypes() {
   return { types, error, addType };
 }
 
-export function useCustomSupplyCategories() { return useCategoryType("supply_category"); }
-export function useCustomProcedureCategories() { return useCategoryType("procedure_category"); }
-export function useCustomFixedCostCategories() { return useCategoryType("fixed_cost_category"); }
+export function useCustomSupplyCategories() {
+  return useCategoryType("supply_category");
+}
+export function useCustomProcedureCategories() {
+  return useCategoryType("procedure_category");
+}
+export function useCustomFixedCostCategories() {
+  return useCategoryType("fixed_cost_category");
+}
 
 // ---------------------------------------------------------------------------
 // Procedure Supplies
@@ -1216,7 +1528,13 @@ type DbProcedureSupply = {
   created_at: string;
 };
 
-export function useProcedureSupplies(procedureId: string): [ProcedureSupply[], (v: ProcedureSupply[] | ((p: ProcedureSupply[]) => ProcedureSupply[])) => Promise<void>, boolean] {
+export function useProcedureSupplies(
+  procedureId: string,
+): [
+  ProcedureSupply[],
+  (v: ProcedureSupply[] | ((p: ProcedureSupply[]) => ProcedureSupply[])) => Promise<void>,
+  boolean,
+] {
   const [items, setItems] = useState<ProcedureSupply[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1230,89 +1548,139 @@ export function useProcedureSupplies(procedureId: string): [ProcedureSupply[], (
         .select("*")
         .eq("user_id", user.id)
         .eq("procedure_id", procedureId);
-      if (error) { logSupabaseError("procedure_supplies load", error); throw error; }
+      if (error) {
+        logSupabaseError("procedure_supplies load", error);
+        throw error;
+      }
       if (data) {
-        setItems((data as DbProcedureSupply[]).map(r => ({
-          id: r.id, procedureId: r.procedure_id, supplyId: r.supply_id, qty: r.quantity
-        })));
+        setItems(
+          (data as DbProcedureSupply[]).map((r) => ({
+            id: r.id,
+            procedureId: r.procedure_id,
+            supplyId: r.supply_id,
+            qty: r.quantity,
+          })),
+        );
       }
-    } catch (e: any) {} finally { setLoading(false); }
-  }, [procedureId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const setter = useCallback(async (v: ProcedureSupply[] | ((p: ProcedureSupply[]) => ProcedureSupply[])) => {
-    if (!procedureId) return;
-    try {
-      setLoading(true);
-      const user = await getCurrentUserOrThrow();
-      const next = typeof v === "function" ? v(items) : v;
-
-      const currentIds = new Set(items.map(i => i.id));
-      const nextIds = new Set(next.map(i => i.id));
-
-      for (const id of currentIds) {
-        if (!nextIds.has(id)) {
-          const { error } = await supabase.from("procedure_supplies").delete().eq("id", id).eq("user_id", user.id);
-          if (error) { logSupabaseError("procedure_supplies delete", error); throw error; }
-        }
-      }
-
-      for (const item of next) {
-        if (!currentIds.has(item.id)) {
-          const { data, error } = await supabase.from("procedure_supplies")
-            .insert({ user_id: user.id, procedure_id: procedureId, supply_id: item.supplyId, quantity: Number(item.qty || 1) })
-            .select().single();
-          if (error) { logSupabaseError("procedure_supplies insert", error); throw error; }
-          item.id = (data as DbProcedureSupply).id;
-        }
-      }
-
-      for (const item of next) {
-        if (currentIds.has(item.id)) {
-          const orig = items.find(x => x.id === item.id);
-          if (JSON.stringify(orig) !== JSON.stringify(item)) {
-            const { error } = await supabase.from("procedure_supplies")
-              .update({ supply_id: item.supplyId, quantity: Number(item.qty || 1) })
-              .eq("id", item.id).eq("user_id", user.id);
-            if (error) { logSupabaseError("procedure_supplies update", error); throw error; }
-          }
-        }
-      }
-      setItems([...next]);
     } catch (e: any) {
-      toast.error("Erro ao sincronizar insumos do procedimento.");
     } finally {
       setLoading(false);
     }
-  }, [items, procedureId]);
+  }, [procedureId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const setter = useCallback(
+    async (v: ProcedureSupply[] | ((p: ProcedureSupply[]) => ProcedureSupply[])) => {
+      if (!procedureId) return;
+      try {
+        setLoading(true);
+        const user = await getCurrentUserOrThrow();
+        const next = typeof v === "function" ? v(items) : v;
+
+        const currentIds = new Set(items.map((i) => i.id));
+        const nextIds = new Set(next.map((i) => i.id));
+
+        for (const id of currentIds) {
+          if (!nextIds.has(id)) {
+            const { error } = await supabase
+              .from("procedure_supplies")
+              .delete()
+              .eq("id", id)
+              .eq("user_id", user.id);
+            if (error) {
+              logSupabaseError("procedure_supplies delete", error);
+              throw error;
+            }
+          }
+        }
+
+        for (const item of next) {
+          if (!currentIds.has(item.id)) {
+            const { data, error } = await supabase
+              .from("procedure_supplies")
+              .insert({
+                user_id: user.id,
+                procedure_id: procedureId,
+                supply_id: item.supplyId,
+                quantity: Number(item.qty || 1),
+              })
+              .select()
+              .single();
+            if (error) {
+              logSupabaseError("procedure_supplies insert", error);
+              throw error;
+            }
+            item.id = (data as DbProcedureSupply).id;
+          }
+        }
+
+        for (const item of next) {
+          if (currentIds.has(item.id)) {
+            const orig = items.find((x) => x.id === item.id);
+            if (JSON.stringify(orig) !== JSON.stringify(item)) {
+              const { error } = await supabase
+                .from("procedure_supplies")
+                .update({ supply_id: item.supplyId, quantity: Number(item.qty || 1) })
+                .eq("id", item.id)
+                .eq("user_id", user.id);
+              if (error) {
+                logSupabaseError("procedure_supplies update", error);
+                throw error;
+              }
+            }
+          }
+        }
+        setItems([...next]);
+      } catch (e: any) {
+        toast.error("Erro ao sincronizar insumos do procedimento.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [items, procedureId],
+  );
 
   return [items, setter, loading];
 }
 
 // --- Treatment Plans ---
 
-export function useTreatmentPlans(patientId?: string): [TreatmentPlan[], string | null, boolean, boolean] {
+export function useTreatmentPlans(
+  patientId?: string,
+): [TreatmentPlan[], string | null, boolean, boolean, () => void] {
   const [plans, setPlans] = useState<TreatmentPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tablesMissing, setTablesMissing] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const refetch = useCallback(() => setRefreshTrigger((value) => value + 1), []);
 
   useEffect(() => {
     let active = true;
     async function fetchPlans() {
       if (!patientId) {
-        if (active) { setPlans([]); setLoading(false); }
+        if (active) {
+          setPlans([]);
+          setLoading(false);
+        }
         return;
       }
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
-          if (active) { setPlans([]); setLoading(false); setError("Não autenticado"); }
+          if (active) {
+            setPlans([]);
+            setLoading(false);
+            setError("Não autenticado");
+          }
           return;
         }
 
-        const { data: plansData, error: plansError } = await supabase.from("treatment_plans")
+        const { data: plansData, error: plansError } = await supabase
+          .from("treatment_plans")
           .select("*")
           .eq("user_id", userData.user.id)
           .eq("patient_id", patientId)
@@ -1320,43 +1688,52 @@ export function useTreatmentPlans(patientId?: string): [TreatmentPlan[], string 
 
         if (plansError) {
           if (plansError.code === "42P01") {
-            if (active) { setTablesMissing(true); setLoading(false); }
+            if (active) {
+              setTablesMissing(true);
+              setLoading(false);
+            }
             return;
           }
           throw plansError;
         }
 
         const planIds = (plansData || []).map((p: any) => p.id);
-        
+
         let itemsData: any[] = [];
         if (planIds.length > 0) {
-          const { data: iData, error: itemsError } = await supabase.from("treatment_plan_items")
+          const { data: iData, error: itemsError } = await supabase
+            .from("treatment_plan_items")
             .select("*, procedures(name)")
             .eq("user_id", userData.user.id)
             .in("treatment_plan_id", planIds)
             .order("created_at", { ascending: true });
-          
+
           if (itemsError) throw itemsError;
           itemsData = iData || [];
         }
 
         if (active) {
           const formattedPlans: TreatmentPlan[] = (plansData || []).map((p: any) => {
-            const planItems = itemsData.filter(i => i.treatment_plan_id === p.id).map(i => ({
-              id: i.id,
-              userId: i.user_id,
-              treatmentPlanId: i.treatment_plan_id,
-              procedureId: i.procedure_id,
-              toothNumber: i.tooth_number,
-              toothRegion: i.tooth_region,
-              description: i.description,
-              priority: i.priority,
-              estimatedPrice: i.estimated_price,
-              status: i.status,
-              createdAt: i.created_at,
-              updatedAt: i.updated_at,
-              procedureName: i.procedures?.name
-            } as TreatmentPlanItem));
+            const planItems = itemsData
+              .filter((i) => i.treatment_plan_id === p.id)
+              .map(
+                (i) =>
+                  ({
+                    id: i.id,
+                    userId: i.user_id,
+                    treatmentPlanId: i.treatment_plan_id,
+                    procedureId: i.procedure_id,
+                    toothNumber: i.tooth_number,
+                    toothRegion: i.tooth_region,
+                    description: i.description,
+                    priority: i.priority,
+                    estimatedPrice: i.estimated_price,
+                    status: i.status,
+                    createdAt: i.created_at,
+                    updatedAt: i.updated_at,
+                    procedureName: i.procedures?.name,
+                  }) as TreatmentPlanItem,
+              );
 
             return {
               id: p.id,
@@ -1370,7 +1747,7 @@ export function useTreatmentPlans(patientId?: string): [TreatmentPlan[], string 
               expectedEndDate: p.expected_end_date,
               createdAt: p.created_at,
               updatedAt: p.updated_at,
-              items: planItems
+              items: planItems,
             } as TreatmentPlan;
           });
           setPlans(formattedPlans);
@@ -1385,10 +1762,12 @@ export function useTreatmentPlans(patientId?: string): [TreatmentPlan[], string 
       }
     }
     fetchPlans();
-    return () => { active = false; };
-  }, [patientId]);
+    return () => {
+      active = false;
+    };
+  }, [patientId, refreshTrigger]);
 
-  return [plans, error, loading, tablesMissing];
+  return [plans, error, loading, tablesMissing, refetch];
 }
 
 export async function saveTreatmentPlan(plan: TreatmentPlan) {
@@ -1403,23 +1782,40 @@ export async function saveTreatmentPlan(plan: TreatmentPlan) {
     notes: plan.notes,
     status: plan.status,
     start_date: plan.startDate,
-    expected_end_date: plan.expectedEndDate
+    expected_end_date: plan.expectedEndDate,
   };
 
   if (plan.id && !plan.id.startsWith("temp-")) {
-    const { error } = await supabase.from("treatment_plans").update(dbObj).eq("id", plan.id).eq("user_id", userData.user.id);
-    if (error) { logSupabaseError("update treatment_plans", error); throw error; }
+    const { error } = await supabase
+      .from("treatment_plans")
+      .update(dbObj)
+      .eq("id", plan.id)
+      .eq("user_id", userData.user.id);
+    if (error) {
+      logSupabaseError("update treatment_plans", error);
+      throw error;
+    }
   } else {
     const { error } = await supabase.from("treatment_plans").insert(dbObj);
-    if (error) { logSupabaseError("insert treatment_plans", error); throw error; }
+    if (error) {
+      logSupabaseError("insert treatment_plans", error);
+      throw error;
+    }
   }
 }
 
 export async function deleteTreatmentPlan(id: string) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return;
-  const { error } = await supabase.from("treatment_plans").delete().eq("id", id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("delete treatment_plans", error); throw error; }
+  const { error } = await supabase
+    .from("treatment_plans")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("delete treatment_plans", error);
+    throw error;
+  }
 }
 
 export async function saveTreatmentPlanItem(item: TreatmentPlanItem) {
@@ -1435,51 +1831,78 @@ export async function saveTreatmentPlanItem(item: TreatmentPlanItem) {
     description: item.description,
     priority: item.priority,
     estimated_price: item.estimatedPrice,
-    status: item.status
+    status: item.status,
   };
 
   if (item.id && !item.id.startsWith("temp-")) {
-    const { error } = await supabase.from("treatment_plan_items").update(dbObj).eq("id", item.id).eq("user_id", userData.user.id);
-    if (error) { logSupabaseError("update treatment_plan_items", error); throw error; }
+    const { error } = await supabase
+      .from("treatment_plan_items")
+      .update(dbObj)
+      .eq("id", item.id)
+      .eq("user_id", userData.user.id);
+    if (error) {
+      logSupabaseError("update treatment_plan_items", error);
+      throw error;
+    }
   } else {
     const { error } = await supabase.from("treatment_plan_items").insert(dbObj);
-    if (error) { logSupabaseError("insert treatment_plan_items", error); throw error; }
+    if (error) {
+      logSupabaseError("insert treatment_plan_items", error);
+      throw error;
+    }
   }
 }
 
 export async function deleteTreatmentPlanItem(id: string) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return;
-  const { error } = await supabase.from("treatment_plan_items").delete().eq("id", id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("delete treatment_plan_items", error); throw error; }
+  const { error } = await supabase
+    .from("treatment_plan_items")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("delete treatment_plan_items", error);
+    throw error;
+  }
 }
 
 // --- Clinical Records / Evolução Clínica ---
 
-export function useClinicalRecords(patientId?: string): [ClinicalRecord[], string | null, boolean, boolean, () => void] {
+export function useClinicalRecords(
+  patientId?: string,
+): [ClinicalRecord[], string | null, boolean, boolean, () => void] {
   const [records, setRecords] = useState<ClinicalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tablesMissing, setTablesMissing] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const refetch = () => setRefreshTrigger(prev => prev + 1);
+  const refetch = () => setRefreshTrigger((prev) => prev + 1);
 
   useEffect(() => {
     let active = true;
     async function fetchRecords() {
       if (!patientId) {
-        if (active) { setRecords([]); setLoading(false); }
+        if (active) {
+          setRecords([]);
+          setLoading(false);
+        }
         return;
       }
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
-          if (active) { setRecords([]); setLoading(false); setError("Não autenticado"); }
+          if (active) {
+            setRecords([]);
+            setLoading(false);
+            setError("Não autenticado");
+          }
           return;
         }
 
-        const { data: recData, error: recError } = await supabase.from("clinical_records")
+        const { data: recData, error: recError } = await supabase
+          .from("clinical_records")
           .select("*, procedures(name)")
           .eq("user_id", userData.user.id)
           .eq("patient_id", patientId)
@@ -1487,39 +1910,48 @@ export function useClinicalRecords(patientId?: string): [ClinicalRecord[], strin
 
         if (recError) {
           if (recError.code === "42P01") {
-            if (active) { setTablesMissing(true); setLoading(false); }
+            if (active) {
+              setTablesMissing(true);
+              setLoading(false);
+            }
             return;
           }
           throw recError;
         }
 
         const recordIds = (recData || []).map((r: any) => r.id);
-        
+
         let suppliesData: any[] = [];
         if (recordIds.length > 0) {
-          const { data: sData, error: sError } = await supabase.from("clinical_record_supplies")
+          const { data: sData, error: sError } = await supabase
+            .from("clinical_record_supplies")
             .select("*, supplies(name)")
             .eq("user_id", userData.user.id)
             .in("clinical_record_id", recordIds);
-          
+
           if (sError) throw sError;
           suppliesData = sData || [];
         }
 
         if (active) {
           const formattedRecords: ClinicalRecord[] = (recData || []).map((r: any) => {
-            const recSupplies = suppliesData.filter(s => s.clinical_record_id === r.id).map(s => ({
-              id: s.id,
-              userId: s.user_id,
-              clinicalRecordId: s.clinical_record_id,
-              patientId: s.patient_id,
-              supplyId: s.supply_id,
-              quantityUsed: s.quantity_used,
-              unitCost: s.unit_cost,
-              totalCost: s.total_cost,
-              createdAt: s.created_at,
-              supplyName: s.supplies?.name
-            } as ClinicalRecordSupply));
+            const recSupplies = suppliesData
+              .filter((s) => s.clinical_record_id === r.id)
+              .map(
+                (s) =>
+                  ({
+                    id: s.id,
+                    userId: s.user_id,
+                    clinicalRecordId: s.clinical_record_id,
+                    patientId: s.patient_id,
+                    supplyId: s.supply_id,
+                    quantityUsed: s.quantity_used,
+                    unitCost: s.unit_cost,
+                    totalCost: s.total_cost,
+                    createdAt: s.created_at,
+                    supplyName: s.supplies?.name,
+                  }) as ClinicalRecordSupply,
+              );
 
             return {
               id: r.id,
@@ -1537,7 +1969,7 @@ export function useClinicalRecords(patientId?: string): [ClinicalRecord[], strin
               createdAt: r.created_at,
               updatedAt: r.updated_at,
               procedureName: r.procedures?.name,
-              supplies: recSupplies
+              supplies: recSupplies,
             } as ClinicalRecord;
           });
           setRecords(formattedRecords);
@@ -1552,7 +1984,9 @@ export function useClinicalRecords(patientId?: string): [ClinicalRecord[], strin
       }
     }
     fetchRecords();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId, refreshTrigger]);
 
   return [records, error, loading, tablesMissing, refetch];
@@ -1573,44 +2007,65 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
     charged_amount: record.chargedAmount || 0,
     real_cost: record.realCost || 0,
     estimated_profit: record.estimatedProfit || 0,
-    signature: record.signature
+    signature: record.signature,
   };
 
   let recordId = record.id;
   let isNew = false;
   if (recordId && !recordId.startsWith("temp-")) {
-    const { error } = await supabase.from("clinical_records").update(dbObj).eq("id", recordId).eq("user_id", userData.user.id);
-    if (error) { logSupabaseError("update clinical_records", error); throw error; }
+    const { error } = await supabase
+      .from("clinical_records")
+      .update(dbObj)
+      .eq("id", recordId)
+      .eq("user_id", userData.user.id);
+    if (error) {
+      logSupabaseError("update clinical_records", error);
+      throw error;
+    }
   } else {
     isNew = true;
     const { data, error } = await supabase.from("clinical_records").insert(dbObj).select().single();
-    if (error) { logSupabaseError("insert clinical_records", error); throw error; }
+    if (error) {
+      logSupabaseError("insert clinical_records", error);
+      throw error;
+    }
     recordId = (data as any).id;
   }
 
   // Handle supplies sync and stock movements
   // Load existing items in DB first for this clinical record to compare
-  const { data: currentItems, error: itemsError } = await supabase.from("clinical_record_supplies")
+  const { data: currentItems, error: itemsError } = await supabase
+    .from("clinical_record_supplies")
     .select("*")
     .eq("clinical_record_id", recordId)
     .eq("user_id", userData.user.id);
-  
+
   if (itemsError) throw itemsError;
 
   const oldItems = currentItems || [];
 
   // Helper to adjust stock
-  const adjustStockAndCreateMovement = async (supplyId: string, quantityChange: number, movementType: 'entrada' | 'saida', reason: string) => {
+  const adjustStockAndCreateMovement = async (
+    supplyId: string,
+    quantityChange: number,
+    movementType: "entrada" | "saida",
+    reason: string,
+  ) => {
     if (quantityChange <= 0) return;
-    
+
     // Get current stock
-    const { data: sData } = await supabase.from("supplies").select("stock_quantity").eq("id", supplyId).single();
+    const { data: sData } = await supabase
+      .from("supplies")
+      .select("stock_quantity")
+      .eq("id", supplyId)
+      .single();
     const currentStock = sData ? Number(sData.stock_quantity || 0) : 0;
-    const newStock = movementType === 'entrada' ? currentStock + quantityChange : currentStock - quantityChange;
-    
+    const newStock =
+      movementType === "entrada" ? currentStock + quantityChange : currentStock - quantityChange;
+
     // Update stock
     await supabase.from("supplies").update({ stock_quantity: newStock }).eq("id", supplyId);
-    
+
     // Create movement
     await supabase.from("stock_movements").insert({
       user_id: userData.user.id,
@@ -1618,7 +2073,7 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
       patient_id: record.patientId,
       movement_type: movementType,
       quantity: quantityChange,
-      reason: reason
+      reason: reason,
     });
   };
 
@@ -1627,29 +2082,44 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
     for (const item of items) {
       if (item.supplyId) {
         const qty = item.quantityUsed || 1;
-        await adjustStockAndCreateMovement(item.supplyId, qty, 'saida', `Uso em ficha clínica: ${recordId}`);
+        await adjustStockAndCreateMovement(
+          item.supplyId,
+          qty,
+          "saida",
+          `Uso em ficha clínica: ${recordId}`,
+        );
       }
     }
   } else {
     // For an existing record: compare old and new
     // 1. Identify deleted supplies (in oldItems but not in items)
     for (const old of oldItems) {
-      const matched = items.find(n => n.supplyId === old.supply_id);
+      const matched = items.find((n) => n.supplyId === old.supply_id);
       if (!matched) {
         // Deleted
         const qty = old.quantity_used || 1;
-        await adjustStockAndCreateMovement(old.supply_id, qty, 'entrada', `Estorno por remoção em evolução clínica: ${recordId}`);
+        await adjustStockAndCreateMovement(
+          old.supply_id,
+          qty,
+          "entrada",
+          `Estorno por remoção em evolução clínica: ${recordId}`,
+        );
       }
     }
 
     // 2. Identify new or updated supplies
     for (const item of items) {
       if (!item.supplyId) continue;
-      const oldMatch = oldItems.find(o => o.supply_id === item.supplyId);
+      const oldMatch = oldItems.find((o) => o.supply_id === item.supplyId);
       if (!oldMatch) {
         // New supply added to existing record
         const qty = item.quantityUsed || 1;
-        await adjustStockAndCreateMovement(item.supplyId, qty, 'saida', `Uso em ficha clínica: ${recordId}`);
+        await adjustStockAndCreateMovement(
+          item.supplyId,
+          qty,
+          "saida",
+          `Uso em ficha clínica: ${recordId}`,
+        );
       } else {
         // Exists in both: compare quantities
         const oldQty = oldMatch.quantity_used || 0;
@@ -1657,10 +2127,20 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
         const diff = newQty - oldQty;
         if (diff > 0) {
           // Used more (saida)
-          await adjustStockAndCreateMovement(item.supplyId, diff, 'saida', `Ajuste (saída) em ficha clínica: ${recordId}`);
+          await adjustStockAndCreateMovement(
+            item.supplyId,
+            diff,
+            "saida",
+            `Ajuste (saída) em ficha clínica: ${recordId}`,
+          );
         } else if (diff < 0) {
           // Used less (entrada)
-          await adjustStockAndCreateMovement(item.supplyId, Math.abs(diff), 'entrada', `Ajuste (entrada) em ficha clínica: ${recordId}`);
+          await adjustStockAndCreateMovement(
+            item.supplyId,
+            Math.abs(diff),
+            "entrada",
+            `Ajuste (entrada) em ficha clínica: ${recordId}`,
+          );
         }
       }
     }
@@ -1668,12 +2148,16 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
 
   // Now perform actual database inserts/updates/deletes for clinical_record_supplies
   const currentIds = new Set(oldItems.map((x: any) => x.id));
-  const nextIds = new Set(items.filter(x => !x.id.startsWith("temp-")).map(x => x.id));
+  const nextIds = new Set(items.filter((x) => !x.id.startsWith("temp-")).map((x) => x.id));
 
   // Deletions
   for (const cid of currentIds) {
     if (!nextIds.has(cid)) {
-      await supabase.from("clinical_record_supplies").delete().eq("id", cid).eq("user_id", userData.user.id);
+      await supabase
+        .from("clinical_record_supplies")
+        .delete()
+        .eq("id", cid)
+        .eq("user_id", userData.user.id);
     }
   }
 
@@ -1687,7 +2171,7 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
         supply_id: item.supplyId || null,
         quantity_used: item.quantityUsed || 1,
         unit_cost: item.unitCost || 0,
-        total_cost: item.totalCost || 0
+        total_cost: item.totalCost || 0,
       });
     }
   }
@@ -1695,12 +2179,16 @@ export async function saveClinicalRecord(record: ClinicalRecord, items: Clinical
   // Updates
   for (const item of items) {
     if (!item.id.startsWith("temp-") && currentIds.has(item.id)) {
-      await supabase.from("clinical_record_supplies").update({
-        supply_id: item.supplyId || null,
-        quantity_used: item.quantityUsed || 1,
-        unit_cost: item.unitCost || 0,
-        total_cost: item.totalCost || 0
-      }).eq("id", item.id).eq("user_id", userData.user.id);
+      await supabase
+        .from("clinical_record_supplies")
+        .update({
+          supply_id: item.supplyId || null,
+          quantity_used: item.quantityUsed || 1,
+          unit_cost: item.unitCost || 0,
+          total_cost: item.totalCost || 0,
+        })
+        .eq("id", item.id)
+        .eq("user_id", userData.user.id);
     }
   }
 }
@@ -1710,41 +2198,60 @@ export async function deleteClinicalRecord(id: string) {
   if (!userData.user) return;
 
   // Load supplies for this record to estorno
-  const { data: currentItems } = await supabase.from("clinical_record_supplies")
+  const { data: currentItems } = await supabase
+    .from("clinical_record_supplies")
     .select("*")
     .eq("clinical_record_id", id)
     .eq("user_id", userData.user.id);
-  
+
   if (currentItems && currentItems.length > 0) {
     for (const item of currentItems) {
       if (item.supply_id) {
         const qty = item.quantity_used || 1;
         // Get current stock
-        const { data: sData } = await supabase.from("supplies").select("stock_quantity").eq("id", item.supply_id).single();
+        const { data: sData } = await supabase
+          .from("supplies")
+          .select("stock_quantity")
+          .eq("id", item.supply_id)
+          .single();
         const currentStock = sData ? Number(sData.stock_quantity || 0) : 0;
         const newStock = currentStock + qty;
-        
+
         // Update stock
-        await supabase.from("supplies").update({ stock_quantity: newStock }).eq("id", item.supply_id);
-        
+        await supabase
+          .from("supplies")
+          .update({ stock_quantity: newStock })
+          .eq("id", item.supply_id);
+
         // Create movement
         await supabase.from("stock_movements").insert({
           user_id: userData.user.id,
           supply_id: item.supply_id,
           patient_id: item.patient_id,
-          movement_type: 'entrada',
+          movement_type: "entrada",
           quantity: qty,
-          reason: `Estorno por exclusão de evolução clínica: ${id}`
+          reason: `Estorno por exclusão de evolução clínica: ${id}`,
         });
       }
     }
   }
 
   // Delete clinical record supplies explicitly to avoid constraint problems
-  await supabase.from("clinical_record_supplies").delete().eq("clinical_record_id", id).eq("user_id", userData.user.id);
+  await supabase
+    .from("clinical_record_supplies")
+    .delete()
+    .eq("clinical_record_id", id)
+    .eq("user_id", userData.user.id);
 
-  const { error } = await supabase.from("clinical_records").delete().eq("id", id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("delete clinical_records", error); throw error; }
+  const { error } = await supabase
+    .from("clinical_records")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("delete clinical_records", error);
+    throw error;
+  }
 }
 
 // --- Financeiro: Orçamentos ---
@@ -1759,17 +2266,25 @@ export function useBudgets(patientId?: string): [Budget[], string | null, boolea
     let active = true;
     async function fetchBudgets() {
       if (!patientId) {
-        if (active) { setBudgets([]); setLoading(false); }
+        if (active) {
+          setBudgets([]);
+          setLoading(false);
+        }
         return;
       }
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
-          if (active) { setBudgets([]); setLoading(false); setError("Não autenticado"); }
+          if (active) {
+            setBudgets([]);
+            setLoading(false);
+            setError("Não autenticado");
+          }
           return;
         }
 
-        const { data: bData, error: bError } = await supabase.from("budgets")
+        const { data: bData, error: bError } = await supabase
+          .from("budgets")
           .select("*")
           .eq("user_id", userData.user.id)
           .eq("patient_id", patientId)
@@ -1777,42 +2292,51 @@ export function useBudgets(patientId?: string): [Budget[], string | null, boolea
 
         if (bError) {
           if (bError.code === "42P01") {
-            if (active) { setTablesMissing(true); setLoading(false); }
+            if (active) {
+              setTablesMissing(true);
+              setLoading(false);
+            }
             return;
           }
           throw bError;
         }
 
         const budgetIds = (bData || []).map((b: any) => b.id);
-        
+
         let itemsData: any[] = [];
         if (budgetIds.length > 0) {
-          const { data: iData, error: iError } = await supabase.from("budget_items")
+          const { data: iData, error: iError } = await supabase
+            .from("budget_items")
             .select("*, procedures(name)")
             .eq("user_id", userData.user.id)
             .in("budget_id", budgetIds)
             .order("created_at", { ascending: true });
-          
+
           if (iError) throw iError;
           itemsData = iData || [];
         }
 
         if (active) {
           const formattedBudgets: Budget[] = (bData || []).map((b: any) => {
-            const bItems = itemsData.filter(i => i.budget_id === b.id).map(i => ({
-              id: i.id,
-              userId: i.user_id,
-              budgetId: i.budget_id,
-              procedureId: i.procedure_id,
-              toothNumber: i.tooth_number,
-              toothRegion: i.tooth_region,
-              description: i.description,
-              quantity: i.quantity,
-              unitPrice: i.unit_price,
-              totalPrice: i.total_price,
-              createdAt: i.created_at,
-              procedureName: i.procedures?.name
-            } as BudgetItem));
+            const bItems = itemsData
+              .filter((i) => i.budget_id === b.id)
+              .map(
+                (i) =>
+                  ({
+                    id: i.id,
+                    userId: i.user_id,
+                    budgetId: i.budget_id,
+                    procedureId: i.procedure_id,
+                    toothNumber: i.tooth_number,
+                    toothRegion: i.tooth_region,
+                    description: i.description,
+                    quantity: i.quantity,
+                    unitPrice: i.unit_price,
+                    totalPrice: i.total_price,
+                    createdAt: i.created_at,
+                    procedureName: i.procedures?.name,
+                  }) as BudgetItem,
+              );
 
             return {
               id: b.id,
@@ -1828,7 +2352,7 @@ export function useBudgets(patientId?: string): [Budget[], string | null, boolea
               notes: b.notes,
               createdAt: b.created_at,
               updatedAt: b.updated_at,
-              items: bItems
+              items: bItems,
             } as Budget;
           });
           setBudgets(formattedBudgets);
@@ -1843,7 +2367,9 @@ export function useBudgets(patientId?: string): [Budget[], string | null, boolea
       }
     }
     fetchBudgets();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId]);
 
   return [budgets, error, loading, tablesMissing];
@@ -1863,29 +2389,40 @@ export async function saveBudget(budget: Budget, items: BudgetItem[]) {
     final_amount: budget.finalAmount || 0,
     status: budget.status || "rascunho",
     valid_until: budget.validUntil || null,
-    notes: budget.notes
+    notes: budget.notes,
   };
 
   let budgetId = budget.id;
   if (budgetId && !budgetId.startsWith("temp-")) {
-    const { error } = await supabase.from("budgets").update({ ...dbObj, updated_at: new Date().toISOString() }).eq("id", budgetId).eq("user_id", userData.user.id);
-    if (error) { logSupabaseError("update budgets", error); throw error; }
+    const { error } = await supabase
+      .from("budgets")
+      .update({ ...dbObj, updated_at: new Date().toISOString() })
+      .eq("id", budgetId)
+      .eq("user_id", userData.user.id);
+    if (error) {
+      logSupabaseError("update budgets", error);
+      throw error;
+    }
   } else {
     const { data, error } = await supabase.from("budgets").insert(dbObj).select().single();
-    if (error) { logSupabaseError("insert budgets", error); throw error; }
+    if (error) {
+      logSupabaseError("insert budgets", error);
+      throw error;
+    }
     budgetId = (data as any).id;
   }
 
   // Handle items sync
-  const { data: currentItems, error: itemsError } = await supabase.from("budget_items")
+  const { data: currentItems, error: itemsError } = await supabase
+    .from("budget_items")
     .select("id")
     .eq("budget_id", budgetId)
     .eq("user_id", userData.user.id);
-  
+
   if (itemsError) throw itemsError;
 
   const currentIds = new Set((currentItems || []).map((x: any) => x.id));
-  const nextIds = new Set(items.filter(x => !x.id.startsWith("temp-")).map(x => x.id));
+  const nextIds = new Set(items.filter((x) => !x.id.startsWith("temp-")).map((x) => x.id));
 
   for (const cid of currentIds) {
     if (!nextIds.has(cid)) {
@@ -1903,13 +2440,17 @@ export async function saveBudget(budget: Budget, items: BudgetItem[]) {
       description: item.description,
       quantity: item.quantity || 1,
       unit_price: item.unitPrice || 0,
-      total_price: item.totalPrice || 0
+      total_price: item.totalPrice || 0,
     };
-    
+
     if (item.id.startsWith("temp-") || !currentIds.has(item.id)) {
       await supabase.from("budget_items").insert(iObj);
     } else {
-      await supabase.from("budget_items").update(iObj).eq("id", item.id).eq("user_id", userData.user.id);
+      await supabase
+        .from("budget_items")
+        .update(iObj)
+        .eq("id", item.id)
+        .eq("user_id", userData.user.id);
     }
   }
 }
@@ -1917,15 +2458,29 @@ export async function saveBudget(budget: Budget, items: BudgetItem[]) {
 export async function deleteBudget(id: string) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return;
-  const { error } = await supabase.from("budgets").delete().eq("id", id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("delete budgets", error); throw error; }
+  const { error } = await supabase
+    .from("budgets")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("delete budgets", error);
+    throw error;
+  }
 }
 
 export async function updateBudgetStatus(id: string, status: string) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return;
-  const { error } = await supabase.from("budgets").update({ status, updated_at: new Date().toISOString() }).eq("id", id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("update budget status", error); throw error; }
+  const { error } = await supabase
+    .from("budgets")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("update budget status", error);
+    throw error;
+  }
 }
 
 // --- Financeiro: Parcelas ---
@@ -1937,12 +2492,19 @@ export function useInstallments(patientId?: string): [PaymentInstallment[], bool
   useEffect(() => {
     let active = true;
     async function fetch() {
-      if (!patientId) { if (active) { setInstallments([]); setLoading(false); } return; }
+      if (!patientId) {
+        if (active) {
+          setInstallments([]);
+          setLoading(false);
+        }
+        return;
+      }
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) return;
 
-        const { data, error } = await supabase.from("payment_installments")
+        const { data, error } = await supabase
+          .from("payment_installments")
           .select("*")
           .eq("user_id", userData.user.id)
           .eq("patient_id", patientId)
@@ -1954,23 +2516,25 @@ export function useInstallments(patientId?: string): [PaymentInstallment[], bool
           if (active) setLoading(false);
           return;
         }
-        
+
         if (active && data) {
-          setInstallments(data.map((d: any) => ({
-            id: d.id,
-            userId: d.user_id,
-            patientId: d.patient_id,
-            budgetId: d.budget_id,
-            installmentNumber: d.installment_number,
-            amount: d.amount,
-            paidAmount: d.paid_amount,
-            remainingAmount: d.remaining_amount,
-            dueDate: d.due_date,
-            status: d.status,
-            notes: d.notes,
-            createdAt: d.created_at,
-            updatedAt: d.updated_at
-          })));
+          setInstallments(
+            data.map((d: any) => ({
+              id: d.id,
+              userId: d.user_id,
+              patientId: d.patient_id,
+              budgetId: d.budget_id,
+              installmentNumber: d.installment_number,
+              amount: d.amount,
+              paidAmount: d.paid_amount,
+              remainingAmount: d.remaining_amount,
+              dueDate: d.due_date,
+              status: d.status,
+              notes: d.notes,
+              createdAt: d.created_at,
+              updatedAt: d.updated_at,
+            })),
+          );
           setLoading(false);
         }
       } catch (err) {
@@ -1979,7 +2543,9 @@ export function useInstallments(patientId?: string): [PaymentInstallment[], bool
       }
     }
     fetch();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId]);
 
   return [installments, loading];
@@ -1999,12 +2565,16 @@ export async function saveInstallments(installments: Partial<PaymentInstallment>
       paid_amount: inst.paidAmount || 0,
       remaining_amount: inst.remainingAmount || 0,
       due_date: inst.dueDate,
-      status: inst.status || 'pendente',
-      notes: inst.notes
+      status: inst.status || "pendente",
+      notes: inst.notes,
     };
 
     if (inst.id && !inst.id.startsWith("temp-")) {
-      const { error } = await supabase.from("payment_installments").update({ ...dbObj, updated_at: new Date().toISOString() }).eq("id", inst.id).eq("user_id", userData.user.id);
+      const { error } = await supabase
+        .from("payment_installments")
+        .update({ ...dbObj, updated_at: new Date().toISOString() })
+        .eq("id", inst.id)
+        .eq("user_id", userData.user.id);
       if (error) throw error;
     } else {
       const { error } = await supabase.from("payment_installments").insert(dbObj);
@@ -2023,25 +2593,41 @@ export async function updateInstallmentStatus(id: string, updates: Partial<Payme
   if (updates.dueDate !== undefined) dbObj.due_date = updates.dueDate;
   if (updates.amount !== undefined) dbObj.amount = updates.amount;
 
-  const { error } = await supabase.from("payment_installments").update(dbObj).eq("id", id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("update installment", error); throw error; }
+  const { error } = await supabase
+    .from("payment_installments")
+    .update(dbObj)
+    .eq("id", id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("update installment", error);
+    throw error;
+  }
 }
 
 // --- Financeiro: Pagamentos ---
 
-export function usePayments(patientId?: string): [Payment[], boolean] {
+export function usePayments(patientId?: string): [Payment[], boolean, () => void] {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const refetch = useCallback(() => setRefreshTrigger((value) => value + 1), []);
 
   useEffect(() => {
     let active = true;
     async function fetch() {
-      if (!patientId) { if (active) { setPayments([]); setLoading(false); } return; }
+      if (!patientId) {
+        if (active) {
+          setPayments([]);
+          setLoading(false);
+        }
+        return;
+      }
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) return;
 
-        const { data, error } = await supabase.from("payments")
+        const { data, error } = await supabase
+          .from("payments")
           .select("*, payment_splits(*)")
           .eq("user_id", userData.user.id)
           .eq("patient_id", patientId)
@@ -2052,31 +2638,33 @@ export function usePayments(patientId?: string): [Payment[], boolean] {
           if (active) setLoading(false);
           return;
         }
-        
+
         if (active && data) {
-          setPayments(data.map((d: any) => ({
-            id: d.id,
-            userId: d.user_id,
-            patientId: d.patient_id,
-            budgetId: d.budget_id,
-            installmentId: d.installment_id,
-            amount: d.amount,
-            paymentMethod: d.payment_method,
-            paymentDate: d.payment_date,
-            cardFee: d.card_fee,
-            netAmount: d.net_amount,
-            notes: d.notes,
-            attachmentUrl: d.attachment_url,
-            createdAt: d.created_at,
-            splits: (d.payment_splits || []).map((s: any) => ({
-              id: s.id,
-              userId: s.user_id,
-              paymentId: s.payment_id,
-              paymentMethod: s.payment_method,
-              amount: s.amount,
-              createdAt: s.created_at
-            }))
-          })));
+          setPayments(
+            data.map((d: any) => ({
+              id: d.id,
+              userId: d.user_id,
+              patientId: d.patient_id,
+              budgetId: d.budget_id,
+              installmentId: d.installment_id,
+              amount: d.amount,
+              paymentMethod: d.payment_method,
+              paymentDate: d.payment_date,
+              cardFee: d.card_fee,
+              netAmount: d.net_amount,
+              notes: d.notes,
+              attachmentUrl: d.attachment_url,
+              createdAt: d.created_at,
+              splits: (d.payment_splits || []).map((s: any) => ({
+                id: s.id,
+                userId: s.user_id,
+                paymentId: s.payment_id,
+                paymentMethod: s.payment_method,
+                amount: s.amount,
+                createdAt: s.created_at,
+              })),
+            })),
+          );
           setLoading(false);
         }
       } catch (err) {
@@ -2085,13 +2673,19 @@ export function usePayments(patientId?: string): [Payment[], boolean] {
       }
     }
     fetch();
-    return () => { active = false; };
-  }, [patientId]);
+    return () => {
+      active = false;
+    };
+  }, [patientId, refreshTrigger]);
 
-  return [payments, loading];
+  return [payments, loading, refetch];
 }
 
-export async function savePayment(payment: Partial<Payment>, splits: Partial<PaymentSplit>[], installmentToUpdate?: Partial<PaymentInstallment>) {
+export async function savePayment(
+  payment: Partial<Payment>,
+  splits: Partial<PaymentSplit>[],
+  installmentToUpdate?: Partial<PaymentInstallment>,
+) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
 
@@ -2105,12 +2699,16 @@ export async function savePayment(payment: Partial<Payment>, splits: Partial<Pay
     payment_date: payment.paymentDate || new Date().toISOString().split("T")[0],
     card_fee: payment.cardFee || 0,
     net_amount: payment.netAmount || 0,
-    notes: payment.notes
+    notes: payment.notes,
   };
 
   let paymentId = payment.id;
   if (paymentId && !paymentId.startsWith("temp-")) {
-    const { error } = await supabase.from("payments").update(dbObj).eq("id", paymentId).eq("user_id", userData.user.id);
+    const { error } = await supabase
+      .from("payments")
+      .update(dbObj)
+      .eq("id", paymentId)
+      .eq("user_id", userData.user.id);
     if (error) throw error;
   } else {
     const { data, error } = await supabase.from("payments").insert(dbObj).select().single();
@@ -2125,18 +2723,22 @@ export async function savePayment(payment: Partial<Payment>, splits: Partial<Pay
       user_id: userData.user.id,
       payment_id: paymentId,
       payment_method: s.paymentMethod,
-      amount: s.amount
+      amount: s.amount,
     });
   }
 
   // Update installment status if provided
   if (installmentToUpdate) {
-    const { error } = await supabase.from("payment_installments").update({
-      paid_amount: installmentToUpdate.paidAmount,
-      remaining_amount: installmentToUpdate.remainingAmount,
-      status: installmentToUpdate.status,
-      updated_at: new Date().toISOString()
-    }).eq("id", installmentToUpdate.id).eq("user_id", userData.user.id);
+    const { error } = await supabase
+      .from("payment_installments")
+      .update({
+        paid_amount: installmentToUpdate.paidAmount,
+        remaining_amount: installmentToUpdate.remainingAmount,
+        status: installmentToUpdate.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", installmentToUpdate.id)
+      .eq("user_id", userData.user.id);
     if (error) throw error;
   }
 }
@@ -2146,25 +2748,44 @@ export async function deletePayment(payment: Payment) {
   if (!userData.user) return;
 
   // First delete the payment (which cascades splits or we delete splits first)
-  const { error: splitError } = await supabase.from("payment_splits").delete().eq("payment_id", payment.id).eq("user_id", userData.user.id);
+  const { error: splitError } = await supabase
+    .from("payment_splits")
+    .delete()
+    .eq("payment_id", payment.id)
+    .eq("user_id", userData.user.id);
   if (splitError) throw splitError;
 
-  const { error } = await supabase.from("payments").delete().eq("id", payment.id).eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("delete payment", error); throw error; }
+  const { error } = await supabase
+    .from("payments")
+    .delete()
+    .eq("id", payment.id)
+    .eq("user_id", userData.user.id);
+  if (error) {
+    logSupabaseError("delete payment", error);
+    throw error;
+  }
 
   // Recalculate if it has an installment
   if (payment.installmentId) {
-    const { data: instData } = await supabase.from("payment_installments").select("*").eq("id", payment.installmentId).single();
+    const { data: instData } = await supabase
+      .from("payment_installments")
+      .select("*")
+      .eq("id", payment.installmentId)
+      .single();
     if (instData) {
       const newPaid = Math.max(0, Number(instData.paid_amount) - payment.amount);
       const newRem = instData.amount - newPaid;
-      const newStatus = newRem <= 0.01 ? "pago" : (newPaid > 0 ? "parcialmente pago" : "pendente");
-      await supabase.from("payment_installments").update({
-        paid_amount: newPaid,
-        remaining_amount: newRem,
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      }).eq("id", payment.installmentId).eq("user_id", userData.user.id);
+      const newStatus = newRem <= 0.01 ? "pago" : newPaid > 0 ? "parcialmente pago" : "pendente";
+      await supabase
+        .from("payment_installments")
+        .update({
+          paid_amount: newPaid,
+          remaining_amount: newRem,
+          status: newStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payment.installmentId)
+        .eq("user_id", userData.user.id);
     }
   }
 }
@@ -2188,7 +2809,8 @@ export function useAppointments(patientId?: string): [Appointment[], boolean, bo
           return;
         }
 
-        let query = supabase.from("appointments")
+        let query = supabase
+          .from("appointments")
           .select("*, patients(full_name, phone), procedures(name), treatment_plans(title)")
           .eq("user_id", userData.user.id);
 
@@ -2196,41 +2818,47 @@ export function useAppointments(patientId?: string): [Appointment[], boolean, bo
           query = query.eq("patient_id", patientId);
         }
 
-        query = query.order("appointment_date", { ascending: true })
-                     .order("start_time", { ascending: true });
+        query = query
+          .order("appointment_date", { ascending: true })
+          .order("start_time", { ascending: true });
 
         const { data, error } = await query;
 
         if (error) {
           if (error.code === "42P01" || error.code === "42703") {
-            if (active) { setTablesMissing(true); setLoading(false); }
+            if (active) {
+              setTablesMissing(true);
+              setLoading(false);
+            }
             return;
           }
           throw error;
         }
 
         if (active && data) {
-          setAppointments(data.map((d: any) => ({
-            id: d.id,
-            userId: d.user_id,
-            patientId: d.patient_id,
-            procedureId: d.procedure_id,
-            treatmentPlanId: d.treatment_plan_id,
-            title: d.title || `Consulta - ${d.patients?.full_name || ''}`,
-            appointmentDate: d.appointment_date,
-            startTime: d.start_time,
-            endTime: d.end_time,
-            status: d.status,
-            type: d.type || 'consulta',
-            notes: d.notes,
-            whatsappReminder: d.whatsapp_reminder ?? false,
-            createdAt: d.created_at,
-            updatedAt: d.updated_at,
-            patientName: d.patients?.full_name || 'Paciente Não Identificado',
-            patientPhone: d.patients?.phone || '',
-            procedureName: d.procedures?.name || '',
-            treatmentPlanTitle: d.treatment_plans?.title || ''
-          })));
+          setAppointments(
+            data.map((d: any) => ({
+              id: d.id,
+              userId: d.user_id,
+              patientId: d.patient_id,
+              procedureId: d.procedure_id,
+              treatmentPlanId: d.treatment_plan_id,
+              title: d.title || `Consulta - ${d.patients?.full_name || ""}`,
+              appointmentDate: d.appointment_date,
+              startTime: d.start_time,
+              endTime: d.end_time,
+              status: d.status,
+              type: d.type || "consulta",
+              notes: d.notes,
+              whatsappReminder: d.whatsapp_reminder ?? false,
+              createdAt: d.created_at,
+              updatedAt: d.updated_at,
+              patientName: d.patients?.full_name || "Paciente Não Identificado",
+              patientPhone: d.patients?.phone || "",
+              procedureName: d.procedures?.name || "",
+              treatmentPlanTitle: d.treatment_plans?.title || "",
+            })),
+          );
           setLoading(false);
         }
       } catch (err: any) {
@@ -2244,7 +2872,9 @@ export function useAppointments(patientId?: string): [Appointment[], boolean, bo
       }
     }
     fetchAppointments();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId]);
 
   return [appointments, loading, tablesMissing];
@@ -2266,18 +2896,25 @@ export async function saveAppointment(app: Appointment) {
     status: app.status || "agendado",
     type: app.type || "consulta",
     notes: app.notes || null,
-    whatsapp_reminder: app.whatsappReminder ?? false
+    whatsapp_reminder: app.whatsappReminder ?? false,
   };
 
   if (app.id && !app.id.startsWith("temp-")) {
-    const { error } = await supabase.from("appointments")
+    const { error } = await supabase
+      .from("appointments")
       .update({ ...dbObj, updated_at: new Date().toISOString() })
       .eq("id", app.id)
       .eq("user_id", userData.user.id);
-    if (error) { logSupabaseError("update appointments", error); throw error; }
+    if (error) {
+      logSupabaseError("update appointments", error);
+      throw error;
+    }
   } else {
     const { error } = await supabase.from("appointments").insert(dbObj);
-    if (error) { logSupabaseError("insert appointments", error); throw error; }
+    if (error) {
+      logSupabaseError("insert appointments", error);
+      throw error;
+    }
   }
 }
 
@@ -2285,35 +2922,49 @@ export async function deleteAppointment(id: string) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return;
 
-  const { error } = await supabase.from("appointments")
+  const { error } = await supabase
+    .from("appointments")
     .eq("id", id)
     .eq("user_id", userData.user.id);
-  if (error) { logSupabaseError("delete appointments", error); throw error; }
+  if (error) {
+    logSupabaseError("delete appointments", error);
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Patient Files (Storage & Metadata)
 // ---------------------------------------------------------------------------
 
-export function usePatientFiles(patientId: string, fileType: PatientFileType): [PatientFile[], boolean, string | null, () => void] {
+export function usePatientFiles(
+  patientId: string,
+  fileType: PatientFileType,
+): [PatientFile[], boolean, string | null, () => void] {
   const [files, setFiles] = useState<PatientFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const refetch = () => setRefreshTrigger(prev => prev + 1);
+  const refetch = () => setRefreshTrigger((prev) => prev + 1);
 
   useEffect(() => {
     let active = true;
     async function fetchFiles() {
       if (!patientId) {
-        if (active) { setFiles([]); setLoading(false); }
+        if (active) {
+          setFiles([]);
+          setLoading(false);
+        }
         return;
       }
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
-          if (active) { setFiles([]); setLoading(false); setError("Não autenticado"); }
+          if (active) {
+            setFiles([]);
+            setLoading(false);
+            setError("Não autenticado");
+          }
           return;
         }
 
@@ -2329,36 +2980,40 @@ export function usePatientFiles(patientId: string, fileType: PatientFileType): [
 
         if (active && data) {
           // Map to domain model and generate signed URLs for viewing
-          const formattedFiles = await Promise.all(data.map(async (d: any) => {
-            const file: PatientFile = {
-              id: d.id,
-              userId: d.user_id,
-              patientId: d.patient_id,
-              fileName: d.file_name,
-              filePath: d.file_path,
-              fileSize: d.file_size,
-              contentType: d.content_type,
-              fileType: d.file_type as PatientFileType,
-              category: d.category,
-              status: d.status,
-              notes: d.notes,
-              ocrStatus: d.ocr_status,
-              extractedText: d.extracted_text,
-              ocrDestinationSuggestion: d.ocr_destination_suggestion,
-              isOcrProcessed: d.is_ocr_processed,
-              reviewedAt: d.reviewed_at,
-              createdAt: d.created_at,
-              updatedAt: d.updated_at
-            };
+          const formattedFiles = await Promise.all(
+            data.map(async (d: any) => {
+              const file: PatientFile = {
+                id: d.id,
+                userId: d.user_id,
+                patientId: d.patient_id,
+                fileName: d.file_name,
+                filePath: d.file_path,
+                fileSize: d.file_size,
+                contentType: d.content_type,
+                fileType: d.file_type as PatientFileType,
+                category: d.category,
+                status: d.status,
+                notes: d.notes,
+                ocrStatus: d.ocr_status,
+                extractedText: d.extracted_text,
+                ocrDestinationSuggestion: d.ocr_destination_suggestion,
+                isOcrProcessed: d.is_ocr_processed,
+                reviewedAt: d.reviewed_at,
+                createdAt: d.created_at,
+                updatedAt: d.updated_at,
+              };
 
-            // Generate signed URL (valid for 1 hour)
-            const { data: urlData } = await supabase.storage.from("patient-files").createSignedUrl(file.filePath, 3600);
-            if (urlData) {
-              file.url = urlData.signedUrl;
-            }
+              // Generate signed URL (valid for 1 hour)
+              const { data: urlData } = await supabase.storage
+                .from("patient-files")
+                .createSignedUrl(file.filePath, 3600);
+              if (urlData) {
+                file.url = urlData.signedUrl;
+              }
 
-            return file;
-          }));
+              return file;
+            }),
+          );
 
           setFiles(formattedFiles);
           setLoading(false);
@@ -2372,33 +3027,37 @@ export function usePatientFiles(patientId: string, fileType: PatientFileType): [
       }
     }
     fetchFiles();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [patientId, fileType, refreshTrigger]);
 
   return [files, loading, error, refetch];
 }
 
 export async function uploadPatientFile(
-  patientId: string | null, 
-  file: File, 
-  fileType: PatientFileType, 
-  category: string, 
+  patientId: string | null,
+  file: File,
+  fileType: PatientFileType,
+  category: string,
   notes?: string,
-  ocrStatus: string = 'pendente'
+  ocrStatus: string = "pendente",
 ): Promise<PatientFile> {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
 
   // Define limits (10MB for photos, 15MB for documents)
-  const maxSize = fileType === 'foto_clinica' ? 10 * 1024 * 1024 : 15 * 1024 * 1024;
+  const maxSize = fileType === "foto_clinica" ? 10 * 1024 * 1024 : 15 * 1024 * 1024;
   if (file.size > maxSize) {
-    throw new Error(`Arquivo muito grande. Limite permitido: ${fileType === 'foto_clinica' ? '10MB para fotos' : '15MB para documentos'}.`);
+    throw new Error(
+      `Arquivo muito grande. Limite permitido: ${fileType === "foto_clinica" ? "10MB para fotos" : "15MB para documentos"}.`,
+    );
   }
 
   // Sanitize filename to avoid weird characters
   const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
   const uniqueId = crypto.randomUUID();
-  const folder = patientId ? patientId : 'inbox';
+  const folder = patientId ? patientId : "inbox";
   const filePath = `${userData.user.id}/${folder}/${uniqueId}-${safeName}`;
 
   // 1. Upload to Supabase Storage
@@ -2406,7 +3065,7 @@ export async function uploadPatientFile(
     .from("patient-files")
     .upload(filePath, file, {
       cacheControl: "3600",
-      upsert: false
+      upsert: false,
     });
 
   if (uploadError) {
@@ -2426,7 +3085,7 @@ export async function uploadPatientFile(
     category: category,
     notes: notes || null,
     ocr_status: ocrStatus,
-    ocr_destination_suggestion: suggestFileDestination(file.name, category)
+    ocr_destination_suggestion: suggestFileDestination(file.name, category),
   };
 
   const { data, error: insertError } = await supabase
@@ -2439,7 +3098,9 @@ export async function uploadPatientFile(
     // If DB insert fails, try to cleanup the storage file
     await supabase.storage.from("patient-files").remove([filePath]);
     logSupabaseError("insert patient_files", insertError);
-    throw new Error("Erro ao salvar informações do arquivo no banco de dados. " + insertError.message);
+    throw new Error(
+      "Erro ao salvar informações do arquivo no banco de dados. " + insertError.message,
+    );
   }
 
   const d = data as any;
@@ -2456,11 +3117,13 @@ export async function uploadPatientFile(
     status: d.status,
     notes: d.notes,
     createdAt: d.created_at,
-    updatedAt: d.updated_at
+    updatedAt: d.updated_at,
   };
 
   // Attach a temporary signed URL so UI can show immediately
-  const { data: urlData } = await supabase.storage.from("patient-files").createSignedUrl(newFile.filePath, 3600);
+  const { data: urlData } = await supabase.storage
+    .from("patient-files")
+    .createSignedUrl(newFile.filePath, 3600);
   if (urlData) {
     newFile.url = urlData.signedUrl;
   }
@@ -2478,17 +3141,15 @@ export async function deletePatientFile(fileId: string, filePath: string) {
     .delete()
     .eq("id", fileId)
     .eq("user_id", userData.user.id);
-  
+
   if (dbError) {
     logSupabaseError("delete patient_files", dbError);
     throw new Error("Erro ao remover registro do banco de dados.");
   }
 
   // 2. Delete from storage
-  const { error: storageError } = await supabase.storage
-    .from("patient-files")
-    .remove([filePath]);
-  
+  const { error: storageError } = await supabase.storage.from("patient-files").remove([filePath]);
+
   if (storageError) {
     logSupabaseError("delete file storage", storageError);
     // Note: If storage fails but DB succeeds, we have an orphaned file, which is better than broken UI.
@@ -2501,21 +3162,42 @@ export async function deletePatientFile(fileId: string, filePath: string) {
 
 export function suggestFileDestination(fileName: string, category: string): string {
   const combined = `${fileName} ${category}`.toLowerCase();
-  
-  if (combined.includes('nota') || combined.includes('nf') || combined.includes('compra') || combined.includes('fornecedor')) {
-    return 'estoque';
+
+  if (
+    combined.includes("nota") ||
+    combined.includes("nf") ||
+    combined.includes("compra") ||
+    combined.includes("fornecedor")
+  ) {
+    return "estoque";
   }
-  if (combined.includes('comprovante') || combined.includes('pix') || combined.includes('recibo') || combined.includes('pagamento')) {
-    return 'financeiro';
+  if (
+    combined.includes("comprovante") ||
+    combined.includes("pix") ||
+    combined.includes("recibo") ||
+    combined.includes("pagamento")
+  ) {
+    return "financeiro";
   }
-  if (combined.includes('radiografia') || combined.includes('raio x') || combined.includes('exame') || combined.includes('laudo')) {
-    return 'ficha_paciente';
+  if (
+    combined.includes("radiografia") ||
+    combined.includes("raio x") ||
+    combined.includes("exame") ||
+    combined.includes("laudo")
+  ) {
+    return "ficha_paciente";
   }
-  if (combined.includes('contrato') || combined.includes('termo') || combined.includes('receita') || combined.includes('atestado') || combined.includes('orçamento')) {
-    return 'documento_paciente';
+  if (
+    combined.includes("contrato") ||
+    combined.includes("termo") ||
+    combined.includes("receita") ||
+    combined.includes("atestado") ||
+    combined.includes("orçamento")
+  ) {
+    return "documento_paciente";
   }
-  
-  return 'caixa_entrada';
+
+  return "caixa_entrada";
 }
 
 export function useOcrInbox(): [PatientFile[], boolean, string | null, () => void] {
@@ -2524,7 +3206,7 @@ export function useOcrInbox(): [PatientFile[], boolean, string | null, () => voi
   const [error, setError] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const refetch = () => setRefreshTrigger(prev => prev + 1);
+  const refetch = () => setRefreshTrigger((prev) => prev + 1);
 
   useEffect(() => {
     let active = true;
@@ -2532,7 +3214,11 @@ export function useOcrInbox(): [PatientFile[], boolean, string | null, () => voi
       try {
         const { data: userData } = await supabase.auth.getUser();
         if (!userData.user) {
-          if (active) { setFiles([]); setLoading(false); setError("Não autenticado"); }
+          if (active) {
+            setFiles([]);
+            setLoading(false);
+            setError("Não autenticado");
+          }
           return;
         }
 
@@ -2550,47 +3236,51 @@ export function useOcrInbox(): [PatientFile[], boolean, string | null, () => voi
             "revisado",
             "erro",
             "aplicado",
-            "arquivado"
+            "arquivado",
           ])
           .order("created_at", { ascending: false });
 
         if (error) throw error;
 
         if (active && data) {
-          const formattedFiles = await Promise.all(data.map(async (d: any) => {
-            const file: PatientFile = {
-              id: d.id,
-              userId: d.user_id,
-              patientId: d.patient_id,
-              fileName: d.file_name,
-              filePath: d.file_path,
-              fileSize: d.file_size,
-              contentType: d.content_type,
-              fileType: d.file_type as PatientFileType,
-              category: d.category,
-              status: d.status,
-              notes: d.notes,
-              ocrStatus: d.ocr_status,
-              extractedText: d.extracted_text,
-              ocrDestinationSuggestion: d.ocr_destination_suggestion,
-              isOcrProcessed: d.is_ocr_processed,
-              reviewedAt: d.reviewed_at,
-              createdAt: d.created_at,
-              updatedAt: d.updated_at
-            };
+          const formattedFiles = await Promise.all(
+            data.map(async (d: any) => {
+              const file: PatientFile = {
+                id: d.id,
+                userId: d.user_id,
+                patientId: d.patient_id,
+                fileName: d.file_name,
+                filePath: d.file_path,
+                fileSize: d.file_size,
+                contentType: d.content_type,
+                fileType: d.file_type as PatientFileType,
+                category: d.category,
+                status: d.status,
+                notes: d.notes,
+                ocrStatus: d.ocr_status,
+                extractedText: d.extracted_text,
+                ocrDestinationSuggestion: d.ocr_destination_suggestion,
+                isOcrProcessed: d.is_ocr_processed,
+                reviewedAt: d.reviewed_at,
+                createdAt: d.created_at,
+                updatedAt: d.updated_at,
+              };
 
-            // Attach patient name virtually if exists
-            if (d.patients) {
-              (file as any).patientName = d.patients.full_name;
-            }
+              // Attach patient name virtually if exists
+              if (d.patients) {
+                (file as any).patientName = d.patients.full_name;
+              }
 
-            const { data: urlData } = await supabase.storage.from("patient-files").createSignedUrl(file.filePath, 3600);
-            if (urlData) {
-              file.url = urlData.signedUrl;
-            }
+              const { data: urlData } = await supabase.storage
+                .from("patient-files")
+                .createSignedUrl(file.filePath, 3600);
+              if (urlData) {
+                file.url = urlData.signedUrl;
+              }
 
-            return file;
-          }));
+              return file;
+            }),
+          );
 
           setFiles(formattedFiles);
           setLoading(false);
@@ -2604,21 +3294,23 @@ export function useOcrInbox(): [PatientFile[], boolean, string | null, () => voi
       }
     }
     fetchInbox();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [refreshTrigger]);
 
   return [files, loading, error, refetch];
 }
 
 export async function applyFileDestination(
-  fileId: string, 
-  data: { 
-    ocr_destination_suggestion: string; 
-    category: string; 
-    notes?: string; 
-    patient_id?: string | null; 
+  fileId: string,
+  data: {
+    ocr_destination_suggestion: string;
+    category: string;
+    notes?: string;
+    patient_id?: string | null;
     file_type?: string;
-  }
+  },
 ) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
@@ -2628,9 +3320,10 @@ export async function applyFileDestination(
     category: data.category,
     notes: data.notes || null,
     patient_id: data.patient_id || null,
-    ocr_status: data.ocr_destination_suggestion === "caixa_entrada" ? "precisa_revisao" : "aplicado",
+    ocr_status:
+      data.ocr_destination_suggestion === "caixa_entrada" ? "precisa_revisao" : "aplicado",
     reviewed_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
   };
 
   if (data.file_type) {
@@ -2642,23 +3335,26 @@ export async function applyFileDestination(
     .update(dbObj)
     .eq("id", fileId)
     .eq("user_id", userData.user.id)
-    .select().single();
+    .select()
+    .single();
 
   if (error) {
     logSupabaseError("applyFileDestination", error);
     throw new Error(`Erro ao aplicar destino do arquivo: ${error.message}`);
   }
   if (!updated) {
-    throw new Error("Não foi possível confirmar a aplicação no módulo de destino (falha de atualização).");
+    throw new Error(
+      "Não foi possível confirmar a aplicação no módulo de destino (falha de atualização).",
+    );
   }
 }
 
 export async function updatePatientFileOcr(
-  fileId: string, 
-  text: string, 
-  status: string, 
-  suggestion: string, 
-  isProcessed: boolean
+  fileId: string,
+  text: string,
+  status: string,
+  suggestion: string,
+  isProcessed: boolean,
 ) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Not authenticated");
@@ -2669,7 +3365,7 @@ export async function updatePatientFileOcr(
       extracted_text: text,
       ocr_status: status,
       ocr_destination_suggestion: suggestion,
-      is_ocr_processed: isProcessed
+      is_ocr_processed: isProcessed,
     })
     .eq("id", fileId)
     .eq("user_id", userData.user.id);
@@ -2681,7 +3377,7 @@ export async function updatePatientFileOcr(
 }
 
 export async function applyFileToEstoque(
-  fileId: string, 
+  fileId: string,
   data: {
     vendor?: string;
     cnpj?: string;
@@ -2690,92 +3386,106 @@ export async function applyFileToEstoque(
     paymentMethod?: string;
     notes?: string;
   },
-  items: any[], 
-  category: string
+  items: any[],
+  category: string,
 ) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
-  
+
   if (!items || items.length === 0) {
     throw new Error("Não há itens válidos para salvar no Estoque.");
   }
-  
+
   let addedCount = 0;
 
   for (const item of items) {
-    if (item.action === 'ignore') continue;
-    
+    if (item.action === "ignore") continue;
+
     let supplyId = item.id;
-    
-    if (item.action === 'create' || !supplyId) {
-      const { data: newSupply, error } = await supabase.from('supplies').insert({
-        user_id: userData.user.id,
-        name: item.name,
-        category: item.category || 'Geral',
-        package_cost: item.totalPrice || 0,
-        yield_quantity: item.quantity || 1,
-        stock_quantity: item.quantity || 1,
-        unit: item.unit || 'un', // Required field fallback
-        minimum_stock: 0,
-        notes: `Criado via Central de PDFs e Arquivos. Fornecedor: ${data.vendor || ""}. NF: ${data.invoiceNumber || ""}. Arquivo: ${fileId}`
-      }).select().single();
-      
+
+    if (item.action === "create" || !supplyId) {
+      const { data: newSupply, error } = await supabase
+        .from("supplies")
+        .insert({
+          user_id: userData.user.id,
+          name: item.name,
+          category: item.category || "Geral",
+          package_cost: item.totalPrice || 0,
+          yield_quantity: item.quantity || 1,
+          stock_quantity: item.quantity || 1,
+          unit: item.unit || "un", // Required field fallback
+          minimum_stock: 0,
+          notes: `Criado via Central de PDFs e Arquivos. Fornecedor: ${data.vendor || ""}. NF: ${data.invoiceNumber || ""}. Arquivo: ${fileId}`,
+        })
+        .select()
+        .single();
+
       if (error) throw new Error(`Erro ao criar insumo ${item.name}: ${error.message}`);
-      if (!newSupply) throw new Error(`Não foi possível confirmar a criação do insumo ${item.name}.`);
-      
+      if (!newSupply)
+        throw new Error(`Não foi possível confirmar a criação do insumo ${item.name}.`);
+
       supplyId = newSupply.id;
-      
-      const { error: movErr } = await supabase.from('stock_movements').insert({
+
+      const { error: movErr } = await supabase.from("stock_movements").insert({
         user_id: userData.user.id,
         supply_id: supplyId,
-        movement_type: 'entrada',
+        movement_type: "entrada",
         quantity: item.quantity || 1,
-        reason: `Entrada via Central de PDFs e Arquivos. Compra em: ${data.date}. Fornecedor: ${data.vendor || ""}.`
+        reason: `Entrada via Central de PDFs e Arquivos. Compra em: ${data.date}. Fornecedor: ${data.vendor || ""}.`,
       });
-      if (movErr) throw new Error(`Erro ao registrar movimentação para ${item.name}: ${movErr.message}`);
-      
+      if (movErr)
+        throw new Error(`Erro ao registrar movimentação para ${item.name}: ${movErr.message}`);
+
       // Post-save validation
       const { data: confirmSupply, error: confirmErr } = await supabase
-        .from('supplies')
-        .select('id')
-        .eq('id', supplyId)
+        .from("supplies")
+        .select("id")
+        .eq("id", supplyId)
         .single();
       if (confirmErr || !confirmSupply) {
         throw new Error("Não foi possível confirmar o envio para o Estoque.");
       }
-      
+
       addedCount++;
-    } else if (item.action === 'update' && supplyId) {
-      const { data: sData, error: findErr } = await supabase.from("supplies").select("stock_quantity").eq("id", supplyId).single();
-      if (findErr || !sData) throw new Error(`Insumo não encontrado para atualização (ID: ${supplyId}).`);
-      
+    } else if (item.action === "update" && supplyId) {
+      const { data: sData, error: findErr } = await supabase
+        .from("supplies")
+        .select("stock_quantity")
+        .eq("id", supplyId)
+        .single();
+      if (findErr || !sData)
+        throw new Error(`Insumo não encontrado para atualização (ID: ${supplyId}).`);
+
       const currentStock = Number(sData.stock_quantity || 0);
       const newStock = currentStock + (item.quantity || 0);
-      
-      const { error: updErr } = await supabase.from('supplies').update({
-        stock_quantity: newStock
-      }).eq('id', supplyId);
+
+      const { error: updErr } = await supabase
+        .from("supplies")
+        .update({
+          stock_quantity: newStock,
+        })
+        .eq("id", supplyId);
       if (updErr) throw new Error(`Erro ao atualizar quantidade do insumo ${item.name}.`);
-      
-      const { error: movErr } = await supabase.from('stock_movements').insert({
+
+      const { error: movErr } = await supabase.from("stock_movements").insert({
         user_id: userData.user.id,
         supply_id: supplyId,
-        movement_type: 'entrada',
+        movement_type: "entrada",
         quantity: item.quantity || 0,
-        reason: `Atualização via Central de PDFs e Arquivos. Compra em: ${data.date}. Fornecedor: ${data.vendor || ""}.`
+        reason: `Atualização via Central de PDFs e Arquivos. Compra em: ${data.date}. Fornecedor: ${data.vendor || ""}.`,
       });
       if (movErr) throw new Error(`Erro ao registrar movimentação para ${item.name}.`);
-      
+
       // Post-save validation
       const { data: confirmSupply, error: confirmErr } = await supabase
-        .from('supplies')
-        .select('id')
-        .eq('id', supplyId)
+        .from("supplies")
+        .select("id")
+        .eq("id", supplyId)
         .single();
       if (confirmErr || !confirmSupply) {
         throw new Error("Não foi possível confirmar o envio para o Estoque.");
       }
-      
+
       addedCount++;
     }
   }
@@ -2784,105 +3494,130 @@ export async function applyFileToEstoque(
     throw new Error("Nenhum item foi selecionado para adicionar ou atualizar no Estoque.");
   }
 
-  await applyFileDestination(fileId, { ocr_destination_suggestion: 'estoque', category, notes: data.notes });
+  await applyFileDestination(fileId, {
+    ocr_destination_suggestion: "estoque",
+    category,
+    notes: data.notes,
+  });
 }
 
 export async function applyFileToFinanceiro(
-  fileId: string, 
-  data: any, 
+  fileId: string,
+  data: any,
   patientId: string,
   category: string,
-  notes: string
+  notes: string,
 ) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
 
-  const { data: inserted, error } = await supabase.from('payments').insert({
-    user_id: userData.user.id,
-    patient_id: patientId || null,
-    amount: data.type === 'despesa' ? -Math.abs(data.amount || 0) : Math.abs(data.amount || 0),
-    net_amount: data.type === 'despesa' ? -Math.abs(data.netAmount || data.amount || 0) : Math.abs(data.netAmount || data.amount || 0),
-    payment_method: data.paymentMethod || 'Outro',
-    payment_date: data.date || new Date().toISOString().split('T')[0],
-    card_fee: data.fee || 0,
-    notes: `${notes}\nGerado via Central de PDFs e Arquivos. Arquivo: ${fileId}`.trim()
-  }).select().single();
-  
+  const { data: inserted, error } = await supabase
+    .from("payments")
+    .insert({
+      user_id: userData.user.id,
+      patient_id: patientId || null,
+      amount: data.type === "despesa" ? -Math.abs(data.amount || 0) : Math.abs(data.amount || 0),
+      net_amount:
+        data.type === "despesa"
+          ? -Math.abs(data.netAmount || data.amount || 0)
+          : Math.abs(data.netAmount || data.amount || 0),
+      payment_method: data.paymentMethod || "Outro",
+      payment_date: data.date || new Date().toISOString().split("T")[0],
+      card_fee: data.fee || 0,
+      notes: `${notes}\nGerado via Central de PDFs e Arquivos. Arquivo: ${fileId}`.trim(),
+    })
+    .select()
+    .single();
+
   if (error) throw new Error(`Erro ao criar lançamento financeiro: ${error.message}`);
   if (!inserted) throw new Error("Não foi possível confirmar a aplicação no Financeiro.");
 
   // Post-save validation
   const { data: confirmPay, error: confirmErr } = await supabase
-    .from('payments')
-    .select('id')
-    .eq('id', inserted.id)
+    .from("payments")
+    .select("id")
+    .eq("id", inserted.id)
     .single();
   if (confirmErr || !confirmPay) {
     throw new Error("Não foi possível confirmar o envio para o Financeiro.");
   }
 
-  await applyFileDestination(fileId, { ocr_destination_suggestion: 'financeiro', category, notes, patient_id: patientId });
+  await applyFileDestination(fileId, {
+    ocr_destination_suggestion: "financeiro",
+    category,
+    notes,
+    patient_id: patientId,
+  });
 }
 
 export async function applyFileToClinicalRecord(
-  fileId: string, 
-  data: any, 
+  fileId: string,
+  data: any,
   patientId: string,
   category: string,
-  notes: string
+  notes: string,
 ) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
   if (!patientId) throw new Error("Selecione um paciente obrigatório para a Ficha Clínica.");
 
-  const { data: inserted, error } = await supabase.from('clinical_records').insert({
-    user_id: userData.user.id,
-    patient_id: patientId,
-    record_date: data.date || new Date().toISOString().split('T')[0],
-    description: `[Central de PDFs - ${category}] [${data.clinicalType.toUpperCase()}] ${data.title}\n${data.summary || ''}`,
-    notes: `${notes}\nArquivo original: ${fileId}`.trim(),
-    charged_amount: 0,
-    real_cost: 0,
-    estimated_profit: 0
-  }).select().single();
-  
+  const { data: inserted, error } = await supabase
+    .from("clinical_records")
+    .insert({
+      user_id: userData.user.id,
+      patient_id: patientId,
+      record_date: data.date || new Date().toISOString().split("T")[0],
+      description: `[Central de PDFs - ${category}] [${data.clinicalType.toUpperCase()}] ${data.title}\n${data.summary || ""}`,
+      notes: `${notes}\nArquivo original: ${fileId}`.trim(),
+      charged_amount: 0,
+      real_cost: 0,
+      estimated_profit: 0,
+    })
+    .select()
+    .single();
+
   if (error) throw new Error(`Erro ao criar registro clínico: ${error.message}`);
   if (!inserted) throw new Error("Não foi possível confirmar a criação do registro clínico.");
 
   // Post-save validation
   const { data: confirmRecord, error: confirmErr } = await supabase
-    .from('clinical_records')
-    .select('id')
-    .eq('id', inserted.id)
+    .from("clinical_records")
+    .select("id")
+    .eq("id", inserted.id)
     .single();
   if (confirmErr || !confirmRecord) {
     throw new Error("Não foi possível confirmar o vínculo com a Ficha Clínica.");
   }
 
-  await applyFileDestination(fileId, { ocr_destination_suggestion: 'ficha_paciente', category, notes, patient_id: patientId });
+  await applyFileDestination(fileId, {
+    ocr_destination_suggestion: "ficha_paciente",
+    category,
+    notes,
+    patient_id: patientId,
+  });
 }
 
 export async function applyFileToDocumento(
   fileId: string,
   patientId: string,
   category: string,
-  notes: string
+  notes: string,
 ) {
   if (!patientId) throw new Error("Selecione um paciente obrigatório para vincular o Documento.");
-  
+
   await applyFileDestination(fileId, {
-    ocr_destination_suggestion: 'documento_paciente',
+    ocr_destination_suggestion: "documento_paciente",
     category,
     notes,
     patient_id: patientId,
-    file_type: 'documento'
+    file_type: "documento",
   });
 
   // Post-save validation
   const { data: confirmDoc, error: confirmErr } = await supabase
-    .from('patient_files')
-    .select('id, patient_id')
-    .eq('id', fileId)
+    .from("patient_files")
+    .select("id, patient_id")
+    .eq("id", fileId)
     .single();
   if (confirmErr || !confirmDoc || confirmDoc.patient_id !== patientId) {
     throw new Error("Não foi possível confirmar o envio para Documentos do Paciente.");
@@ -2890,27 +3625,31 @@ export async function applyFileToDocumento(
 }
 
 export async function applyFileToBudget(
-  fileId: string, 
-  data: any, 
+  fileId: string,
+  data: any,
   patientId: string,
   category: string,
-  notes: string
+  notes: string,
 ) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Não autenticado");
   if (!patientId) throw new Error("Selecione um paciente obrigatório para gerar o Orçamento.");
 
-  const { data: budget, error } = await supabase.from('budgets').insert({
-    user_id: userData.user.id,
-    patient_id: patientId,
-    title: data.title || `Orçamento via Central de PDFs`,
-    total_amount: data.totalAmount || 0,
-    discount: 0,
-    final_amount: data.totalAmount || 0,
-    status: data.status || 'rascunho',
-    notes: `${notes}\nArquivo original: ${fileId}`.trim()
-  }).select().single();
-  
+  const { data: budget, error } = await supabase
+    .from("budgets")
+    .insert({
+      user_id: userData.user.id,
+      patient_id: patientId,
+      title: data.title || `Orçamento via Central de PDFs`,
+      total_amount: data.totalAmount || 0,
+      discount: 0,
+      final_amount: data.totalAmount || 0,
+      status: data.status || "rascunho",
+      notes: `${notes}\nArquivo original: ${fileId}`.trim(),
+    })
+    .select()
+    .single();
+
   if (error) throw new Error(`Erro ao criar orçamento: ${error.message}`);
   if (!budget) throw new Error("Não foi possível confirmar a criação do orçamento.");
 
@@ -2918,24 +3657,29 @@ export async function applyFileToBudget(
     const items = data.procedures.map((p: any) => ({
       user_id: userData.user.id,
       budget_id: budget.id,
-      description: p.description || 'Procedimento sem nome',
+      description: p.description || "Procedimento sem nome",
       quantity: 1,
       unit_price: p.price || 0,
-      total_price: p.price || 0
+      total_price: p.price || 0,
     }));
-    const { error: itemsErr } = await supabase.from('budget_items').insert(items);
+    const { error: itemsErr } = await supabase.from("budget_items").insert(items);
     if (itemsErr) throw new Error(`Erro ao salvar procedimentos do orçamento: ${itemsErr.message}`);
   }
 
   // Post-save validation
   const { data: confirmBudget, error: confirmErr } = await supabase
-    .from('budgets')
-    .select('id')
-    .eq('id', budget.id)
+    .from("budgets")
+    .select("id")
+    .eq("id", budget.id)
     .single();
   if (confirmErr || !confirmBudget) {
     throw new Error("Não foi possível confirmar a criação do Orçamento.");
   }
 
-  await applyFileDestination(fileId, { ocr_destination_suggestion: 'orcamento', category, notes, patient_id: patientId });
+  await applyFileDestination(fileId, {
+    ocr_destination_suggestion: "orcamento",
+    category,
+    notes,
+    patient_id: patientId,
+  });
 }

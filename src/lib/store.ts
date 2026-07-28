@@ -43,12 +43,17 @@ export type Settings = {
   rounding: number; // 0, 5, 10, 50, 100
 };
 
-export type PatientStatus = "em tratamento" | "em acompanhamento";
+export type PatientStatus =
+  | "inativo"
+  | "em tratamento"
+  | "em acompanhamento"
+  | "marcar c/ parceiros";
 
 export type Patient = {
   id: string;
   recordNumber?: string;
-  fullName: string; referenceNote?: string;
+  fullName: string;
+  referenceNote?: string;
   cpf?: string;
   rg?: string;
   issuingAgency?: string;
@@ -61,6 +66,7 @@ export type Patient = {
   address?: string;
   administrativeNotes?: string;
   status: PatientStatus;
+  invoicePreference?: boolean | null;
   createdAt: string;
 };
 
@@ -94,7 +100,7 @@ export type Anamnesis = {
   updatedAt: string;
 };
 
-export type ToothStatusType = typeof TOOTH_STATUS[number];
+export type ToothStatusType = (typeof TOOTH_STATUS)[number];
 
 export interface OdontogramEntry {
   id: string;
@@ -116,7 +122,7 @@ export interface TreatmentPlan {
   title: string;
   diagnosis?: string;
   notes?: string;
-  status: 'planejado' | 'em andamento' | 'concluído' | 'pausado' | 'cancelado';
+  status: "planejado" | "em andamento" | "concluído" | "pausado" | "cancelado";
   startDate?: string;
   expectedEndDate?: string;
   createdAt: string;
@@ -132,19 +138,34 @@ export interface TreatmentPlanItem {
   toothNumber?: string;
   toothRegion?: string;
   description?: string;
-  priority: 'baixa' | 'média' | 'alta' | 'urgente';
+  priority: "baixa" | "média" | "alta" | "urgente";
   estimatedPrice?: number;
-  status: 'planejado' | 'aprovado' | 'em execução' | 'concluído' | 'cancelado';
+  status: "planejado" | "aprovado" | "em execução" | "concluído" | "cancelado";
   createdAt: string;
   updatedAt: string;
-  
+
   // Virtual field mapped for UI display if needed
   procedureName?: string;
 }
 
-export type AppointmentStatus = 'agendado' | 'confirmado' | 'em atendimento' | 'concluído' | 'faltou' | 'cancelado' | 'remarcado';
+export type AppointmentStatus =
+  | "agendado"
+  | "confirmado"
+  | "em atendimento"
+  | "concluído"
+  | "faltou"
+  | "cancelado"
+  | "remarcado";
 
-export type AppointmentType = 'consulta' | 'avaliação' | 'retorno' | 'procedimento' | 'emergência' | 'manutenção' | 'orçamento' | 'outro';
+export type AppointmentType =
+  | "consulta"
+  | "avaliação"
+  | "retorno"
+  | "procedimento"
+  | "emergência"
+  | "manutenção"
+  | "orçamento"
+  | "outro";
 
 export interface Appointment {
   id: string;
@@ -162,14 +183,13 @@ export interface Appointment {
   whatsappReminder: boolean;
   createdAt: string;
   updatedAt: string;
-  
+
   // Virtual / joined fields for UI helper mapping:
   patientName?: string;
   patientPhone?: string;
   procedureName?: string;
   treatmentPlanTitle?: string;
 }
-
 
 export interface ClinicalRecordSupply {
   id: string;
@@ -217,12 +237,12 @@ export interface Budget {
   totalAmount: number;
   discount: number;
   finalAmount: number;
-  status: 'rascunho' | 'enviado' | 'aprovado' | 'recusado' | 'vencido' | 'cancelado';
+  status: "rascunho" | "enviado" | "aprovado" | "recusado" | "vencido" | "cancelado";
   validUntil?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;
-  
+
   // Virtual
   items?: BudgetItem[];
 }
@@ -254,7 +274,7 @@ export interface PaymentInstallment {
   paidAmount: number;
   remainingAmount: number;
   dueDate?: string;
-  status: 'pendente' | 'parcialmente pago' | 'pago' | 'atrasado' | 'cancelado' | 'renegociado';
+  status: "pendente" | "parcialmente pago" | "pago" | "atrasado" | "cancelado" | "renegociado";
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -288,7 +308,7 @@ export interface PaymentSplit {
   createdAt: string;
 }
 
-export type PatientFileType = 'foto_clinica' | 'documento';
+export type PatientFileType = "foto_clinica" | "documento";
 
 export interface PatientFile {
   id: string;
@@ -310,19 +330,34 @@ export interface PatientFile {
   reviewedAt?: string;
   createdAt: string;
   updatedAt: string;
-  
+
   // Virtual for UI
   url?: string;
 }
 
 export const PHOTO_CATEGORIES = [
-  "intraoral", "extraoral", "sorriso", "antes", "depois", 
-  "radiografia", "procedimento", "evolução", "outro"
+  "intraoral",
+  "extraoral",
+  "sorriso",
+  "antes",
+  "depois",
+  "radiografia",
+  "procedimento",
+  "evolução",
+  "outro",
 ];
 
 export const DOCUMENT_CATEGORIES = [
-  "contrato", "termo", "exame", "radiografia", "receita", 
-  "atestado", "orçamento", "comprovante", "documento pessoal", "outro"
+  "contrato",
+  "termo",
+  "exame",
+  "radiografia",
+  "receita",
+  "atestado",
+  "orçamento",
+  "comprovante",
+  "documento pessoal",
+  "outro",
 ];
 
 export type FixedCostFrequency = "mensal" | "anual" | "bimestral" | "trimestral" | "semestral";
@@ -364,26 +399,55 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const SUPPLY_CATEGORIES = [
-  "Descartáveis","Anestesia","Dentística","Endodontia","Periodontia",
-  "Cirurgia","Prótese","Ortodontia","Implantodontia","Radiologia",
-  "Biossegurança","Laboratório","Outro"
+  "Descartáveis",
+  "Anestesia",
+  "Dentística",
+  "Endodontia",
+  "Periodontia",
+  "Cirurgia",
+  "Prótese",
+  "Ortodontia",
+  "Implantodontia",
+  "Radiologia",
+  "Biossegurança",
+  "Laboratório",
+  "Outro",
 ];
 
 export const PROCEDURE_CATEGORIES = [
-  "Consulta","Profilaxia","Restauração","Clareamento","Endodontia",
-  "Cirurgia","Periodontia","Prótese","Ortodontia","Implantodontia",
-  "Radiologia","Outro"
+  "Consulta",
+  "Profilaxia",
+  "Restauração",
+  "Clareamento",
+  "Endodontia",
+  "Cirurgia",
+  "Periodontia",
+  "Prótese",
+  "Ortodontia",
+  "Implantodontia",
+  "Radiologia",
+  "Outro",
 ];
 
-export const PATIENT_STATUS: PatientStatus[] = ["em tratamento", "em acompanhamento"];
+export const PATIENT_STATUS: PatientStatus[] = [
+  "inativo",
+  "em tratamento",
+  "em acompanhamento",
+  "marcar c/ parceiros",
+];
 
 export const PATIENT_GENDERS = ["Masculino", "Feminino", "Outro"];
 
-export const PATIENT_MARITAL_STATUSES = ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "Separado(a)", "Outro"];
-
-export const ANAMNESIS_STATUS: AnamnesisStatus[] = [
-  "rascunho", "concluída", "assinada"
+export const PATIENT_MARITAL_STATUSES = [
+  "Solteiro(a)",
+  "Casado(a)",
+  "Divorciado(a)",
+  "Viúvo(a)",
+  "Separado(a)",
+  "Outro",
 ];
+
+export const ANAMNESIS_STATUS: AnamnesisStatus[] = ["rascunho", "concluída", "assinada"];
 
 export const TOOTH_REGIONS = [
   "inteiro",
@@ -409,14 +473,14 @@ export const TOOTH_STATUS = [
 ];
 
 export const STATUS_COLORS: Record<string, string> = {
-  "cárie": "#ef4444",
-  "restauração": "#3b82f6",
-  "amálgama": "#94a3b8",
-  "canal": "#a855f7",
-  "coroa": "#fbbf24",
-  "implante": "#a16207",
-  "dor": "#f97316",
-  "ausente": "#cbd5e1",
+  cárie: "#ef4444",
+  restauração: "#3b82f6",
+  amálgama: "#94a3b8",
+  canal: "#a855f7",
+  coroa: "#fbbf24",
+  implante: "#a16207",
+  dor: "#f97316",
+  ausente: "#cbd5e1",
   "extração indicada": "#991b1b",
   "extração realizada": "#1e293b",
 };
@@ -445,12 +509,20 @@ function write<T>(key: string, value: T) {
 }
 
 export function usePersisted<T>(key: string, fallback: T): [T, (v: T | ((p: T) => T)) => void] {
-  const subscribe = useCallback((cb: () => void) => {
-    let set = listeners.get(key);
-    if (!set) { set = new Set(); listeners.set(key, set); }
-    set.add(cb);
-    return () => { set!.delete(cb); };
-  }, [key]);
+  const subscribe = useCallback(
+    (cb: () => void) => {
+      let set = listeners.get(key);
+      if (!set) {
+        set = new Set();
+        listeners.set(key, set);
+      }
+      set.add(cb);
+      return () => {
+        set!.delete(cb);
+      };
+    },
+    [key],
+  );
   const getSnap = useCallback(() => {
     if (typeof window === "undefined") return JSON.stringify(fallback);
     return localStorage.getItem(PREFIX + key) ?? JSON.stringify(fallback);
@@ -458,13 +530,22 @@ export function usePersisted<T>(key: string, fallback: T): [T, (v: T | ((p: T) =
   const raw = useSyncExternalStore(subscribe, getSnap, () => JSON.stringify(fallback));
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
-  const value: T = hydrated ? (() => {
-    try { return JSON.parse(raw) as T; } catch { return fallback; }
-  })() : fallback;
-  const setValue = useCallback((v: T | ((p: T) => T)) => {
-    const next = typeof v === "function" ? (v as (p: T) => T)(value) : v;
-    write(key, next);
-  }, [key, value]);
+  const value: T = hydrated
+    ? (() => {
+        try {
+          return JSON.parse(raw) as T;
+        } catch {
+          return fallback;
+        }
+      })()
+    : fallback;
+  const setValue = useCallback(
+    (v: T | ((p: T) => T)) => {
+      const next = typeof v === "function" ? (v as (p: T) => T)(value) : v;
+      write(key, next);
+    },
+    [key, value],
+  );
   return [value, setValue];
 }
 
@@ -476,6 +557,10 @@ export function uid() {
 
 export function clearAll() {
   if (typeof window === "undefined") return;
-  Object.keys(localStorage).filter(k => k.startsWith(PREFIX)).forEach(k => localStorage.removeItem(k));
-  ["supplies","fixedCosts","procedures","settings","history","supplyCats","procCats"].forEach(emit);
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(PREFIX))
+    .forEach((k) => localStorage.removeItem(k));
+  ["supplies", "fixedCosts", "procedures", "settings", "history", "supplyCats", "procCats"].forEach(
+    emit,
+  );
 }

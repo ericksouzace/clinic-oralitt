@@ -37,3 +37,8 @@ dist-ssr
 .env.local
 .vercel/
 *.bak
+
+# Variáveis locais
+.env
+.env.local
+.env.*.local
