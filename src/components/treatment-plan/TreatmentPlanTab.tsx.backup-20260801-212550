@@ -28,7 +28,6 @@ import {
 } from "@/lib/store";
 import { formatCurrency } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { PatientComorbidities } from "@/components/patient/PatientComorbidities";
 
 const db = supabase as any;
 import { createBudgetPdfFile, openBudgetPdf, type BudgetPdfInput } from "@/lib/budget-pdf";
@@ -37,7 +36,7 @@ interface Props {
   patientId: string;
 }
 
-type InternalTab = "plano" | "comorbidades" | "orcamento";
+type InternalTab = "plano" | "orcamento";
 type ItemStatus = TreatmentPlanItem["status"];
 
 const TOOTH_NUMBERS = [
@@ -621,18 +620,6 @@ export function TreatmentPlanTab({ patientId }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => setInternalTab("comorbidades")}
-          className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
-            internalTab === "comorbidades"
-              ? "border-[#C9A227] text-[#C9A227]"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Comorbidades
-        </button>
-
-        <button
-          type="button"
           onClick={() => setInternalTab("orcamento")}
           className={`border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
             internalTab === "orcamento"
@@ -780,8 +767,6 @@ export function TreatmentPlanTab({ patientId }: Props) {
             </div>
           </Card>
         </div>
-      ) : internalTab === "comorbidades" ? (
-        <PatientComorbidities patientId={patientId} mode="panel" />
       ) : (
         <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

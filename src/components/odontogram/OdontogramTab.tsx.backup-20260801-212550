@@ -56,7 +56,6 @@ function getRegionDisplayName(region?: string) {
     return "Dente inteiro";
   }
   if (region === "raiz/base") return "Raiz / canal";
-  if (region === "coroa inteira") return "Coroa inteira";
   return region;
 }
 
@@ -215,13 +214,6 @@ function OdontogramContent({ patientId }: Props) {
 
     if (isRootOnlyStatus(brushStatus)) {
       openToothRegionModal(toothNumber, "raiz/base");
-      return;
-    }
-
-    // Coroa sempre afeta toda a área coronária.
-    // A região clicada é ignorada e não há escolha de setor.
-    if (normalizedStatus === "coroa") {
-      openToothRegionModal(toothNumber, "coroa inteira");
       return;
     }
 

@@ -116,9 +116,6 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
     latestEntry(toothEntries, "inteiro") ||
     latestEntry(toothEntries, "dente inteiro");
 
-  // Pintura exclusiva de toda a área coronária, sem atingir a raiz.
-  const fullCrownEntry = latestEntry(toothEntries, "coroa inteira");
-
   const normalizedWholeStatus = wholeEntry?.status
     ? normalizeOdontogramStatus(wholeEntry.status)
     : undefined;
@@ -149,15 +146,7 @@ export function ToothSvg({ toothNumber, entries, onRegionClick }: Props) {
     Boolean(canalEntry),
   );
 
-  const fullCrownPaint =
-    fullCrownEntry &&
-    normalizeOdontogramStatus(fullCrownEntry.status) === "coroa"
-      ? fullCrownEntry.color
-      : undefined;
-
   const regionColor = (region: string) => {
-    // Coroa pinta os quatro setores e o centro ao mesmo tempo.
-    if (fullCrownPaint) return fullCrownPaint;
     if (wholePaint) return wholePaint;
     return latestPaintEntry(toothEntries, region)?.color || EMPTY_FILL;
   };
