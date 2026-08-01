@@ -140,6 +140,7 @@ export interface TreatmentPlanItem {
   description?: string;
   priority: "baixa" | "média" | "alta" | "urgente";
   estimatedPrice?: number;
+  sortOrder?: number;
   status: "planejado" | "aprovado" | "em execução" | "concluído" | "cancelado";
   createdAt: string;
   updatedAt: string;

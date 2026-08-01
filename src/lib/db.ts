@@ -1728,6 +1728,10 @@ export function useTreatmentPlans(
                     description: i.description,
                     priority: i.priority,
                     estimatedPrice: i.estimated_price,
+                    sortOrder:
+                      i.sort_order == null
+                        ? undefined
+                        : Number(i.sort_order),
                     status: i.status,
                     createdAt: i.created_at,
                     updatedAt: i.updated_at,
@@ -1831,6 +1835,10 @@ export async function saveTreatmentPlanItem(item: TreatmentPlanItem) {
     description: item.description,
     priority: item.priority,
     estimated_price: item.estimatedPrice,
+    sort_order:
+      item.sortOrder == null
+        ? null
+        : Number(item.sortOrder),
     status: item.status,
   };
 

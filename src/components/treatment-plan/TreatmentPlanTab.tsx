@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { CalendarPlus, CheckCircle2, Edit3, FileDown, Plus, Printer, Trash2 } from "lucide-react";
+import {
+  CalendarPlus,
+  CheckCircle2,
+  Edit3,
+  FileDown,
+  GripVertical,
+  Plus,
+  Printer,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Input, Label, Select } from "@/components/ui-bits";
 import {
@@ -136,9 +145,118 @@ export function TreatmentPlanTab({ patientId }: Props) {
     () =>
       plans
         .flatMap((plan) => plan.items || [])
-        .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+        .sort((a, b) => {
+          const orderA =
+            a.sortOrder == null
+              ? Number.MAX_SAFE_INTEGER
+              : Number(a.sortOrder);
+
+          const orderB =
+            b.sortOrder == null
+              ? Number.MAX_SAFE_INTEGER
+              : Number(b.sortOrder);
+
+          if (orderA !== orderB) return orderA - orderB;
+
+          return (
+            new Date(a.createdAt).getTime() -
+            new Date(b.createdAt).getTime()
+          );
+        }),
     [plans],
   );
+
+  const [orderedItems, setOrderedItems] = useState<TreatmentPlanItem[]>([]);
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
+
+  useEffect(() => {
+    if (draggedItemId) return;
+    setOrderedItems(allItems);
+  }, [allItems, draggedItemId]);
+
+  const persistItemOrder = async (items: TreatmentPlanItem[]) => {
+    const { data: userData } = await db.auth.getUser();
+
+    if (!userData.user) {
+      throw new Error("Não autenticado");
+    }
+
+    const updates = items.map((item, index) =>
+      db
+        .from("treatment_plan_items")
+        .update({
+          sort_order: index,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", item.id)
+        .eq("user_id", userData.user.id),
+    );
+
+    const results = await Promise.all(updates);
+    const failed = results.find((result) => result.error);
+
+    if (failed?.error) {
+      throw failed.error;
+    }
+  };
+
+  const handleDropItem = async (targetItemId: string) => {
+    if (
+      !draggedItemId ||
+      draggedItemId === targetItemId ||
+      savingOrder
+    ) {
+      setDraggedItemId(null);
+      setDragOverItemId(null);
+      return;
+    }
+
+    const previous = [...orderedItems];
+    const next = [...orderedItems];
+
+    const sourceIndex = next.findIndex(
+      (item) => item.id === draggedItemId,
+    );
+
+    const targetIndex = next.findIndex(
+      (item) => item.id === targetItemId,
+    );
+
+    if (sourceIndex < 0 || targetIndex < 0) {
+      setDraggedItemId(null);
+      setDragOverItemId(null);
+      return;
+    }
+
+    const [movedItem] = next.splice(sourceIndex, 1);
+    next.splice(targetIndex, 0, movedItem);
+
+    const normalized = next.map((item, index) => ({
+      ...item,
+      sortOrder: index,
+    }));
+
+    setOrderedItems(normalized);
+    setDraggedItemId(null);
+    setDragOverItemId(null);
+
+    try {
+      setSavingOrder(true);
+      await persistItemOrder(normalized);
+      toast.success("Ordem dos procedimentos atualizada.");
+      refetchPlans();
+    } catch (orderError: any) {
+      setOrderedItems(previous);
+      toast.error(
+        orderError?.message ||
+          "Não foi possível salvar a nova ordem.",
+      );
+    } finally {
+      setSavingOrder(false);
+    }
+  };
 
   useEffect(() => {
     if (patient?.status) setPatientStatus(patient.status);
@@ -357,6 +475,11 @@ export function TreatmentPlanTab({ patientId }: Props) {
         description: itemDraft.description.trim(),
         priority: itemDraft.priority || "média",
         estimatedPrice: Number(itemDraft.estimatedPrice || 0),
+        sortOrder:
+          itemDraft.sortOrder ??
+          (itemDraft.id
+            ? undefined
+            : orderedItems.length),
         status: itemDraft.status || "planejado",
         createdAt: itemDraft.createdAt || now,
         updatedAt: now,
@@ -680,7 +803,8 @@ export function TreatmentPlanTab({ patientId }: Props) {
           <Card className="overflow-hidden border border-border bg-white p-0">
             <div className="overflow-x-auto">
               <div className="min-w-[760px]">
-                <div className="grid grid-cols-[minmax(260px,1fr)_minmax(140px,210px)_300px] border-b border-border bg-secondary/30 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <div className="grid grid-cols-[40px_minmax(260px,1fr)_minmax(140px,210px)_300px] border-b border-border bg-secondary/30 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span aria-hidden="true"></span>
                   <span>Procedimento</span>
                   <span>Dentes</span>
                   <span className="text-right">Realização e ações</span>
@@ -692,19 +816,70 @@ export function TreatmentPlanTab({ patientId }: Props) {
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
-                    {allItems.map((item) => {
+                    {orderedItems.map((item) => {
                       const performed = effectiveStatus(item) === "concluído";
                       const busy = busyItemId === item.id;
 
                       return (
                         <div
                           key={item.id}
-                          className={`grid grid-cols-[minmax(260px,1fr)_minmax(140px,210px)_300px] items-center gap-3 px-4 py-3 transition-colors ${
+                          className={`grid grid-cols-[40px_minmax(260px,1fr)_minmax(140px,210px)_300px] items-center gap-3 px-4 py-3 transition-colors ${
                             performed
                               ? "border-l-4 border-l-emerald-500 bg-emerald-50/70"
                               : "border-l-4 border-l-transparent bg-white"
                           }`}
-                        >
+                        
+  draggable={!savingOrder && !busy}
+  onDragStart={(event) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", item.id);
+    setDraggedItemId(item.id);
+  }}
+  onDragEnter={() => setDragOverItemId(item.id)}
+  onDragOver={(event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }}
+  onDrop={(event) => {
+    event.preventDefault();
+    void handleDropItem(item.id);
+  }}
+  onDragEnd={() => {
+    setDraggedItemId(null);
+    setDragOverItemId(null);
+  }}
+  style={{
+    opacity: draggedItemId === item.id ? 0.55 : 1,
+    boxShadow:
+      dragOverItemId === item.id &&
+      draggedItemId !== item.id
+        ? "inset 0 2px 0 #C9A227"
+        : undefined,
+  }}
+>
+                          <button
+                            type="button"
+                            draggable
+                            disabled={savingOrder || busy}
+                            onDragStart={(event) => {
+                              event.stopPropagation();
+                              event.dataTransfer.effectAllowed = "move";
+                              event.dataTransfer.setData(
+                                "text/plain",
+                                item.id,
+                              );
+                              setDraggedItemId(item.id);
+                            }}
+                            className="flex h-9 w-9 cursor-grab items-center justify-center rounded-lg text-muted-foreground transition hover:bg-amber-50 hover:text-[#8A6A16] active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                            title="Arrastar para reorganizar"
+                            aria-label={`Reorganizar ${getItemLabel(
+                              item,
+                              procedures,
+                            )}`}
+                          >
+                            <GripVertical className="h-5 w-5" />
+                          </button>
+
                           <div className="min-w-0">
                             <div
                               className={`truncate text-sm font-semibold ${performed ? "text-emerald-900" : "text-foreground"}`}

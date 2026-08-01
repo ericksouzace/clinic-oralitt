@@ -1,5 +1,11 @@
-import React, { useState } from "react";
-import { Edit3, Plus, Trash2 } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import {
+  ArrowDownWideNarrow,
+  Check,
+  Edit3,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button, Card, Input, Label, Textarea } from "@/components/ui-bits";
 import {
@@ -65,6 +71,28 @@ export function ClinicalRecordTab({ patientId }: Props) {
   const [linkMarkers, setLinkMarkers] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [dateOrder, setDateOrder] = useState<"newest" | "oldest">("newest");
+  const [isOrderMenuOpen, setIsOrderMenuOpen] = useState(false);
+
+  const orderedRecords = useMemo(() => {
+    return [...records].sort((a, b) => {
+      const dateA = new Date(`${a.recordDate}T00:00:00`).getTime();
+      const dateB = new Date(`${b.recordDate}T00:00:00`).getTime();
+
+      if (dateA !== dateB) {
+        return dateOrder === "newest"
+          ? dateB - dateA
+          : dateA - dateB;
+      }
+
+      const createdA = new Date(a.createdAt || 0).getTime();
+      const createdB = new Date(b.createdAt || 0).getTime();
+
+      return dateOrder === "newest"
+        ? createdB - createdA
+        : createdA - createdB;
+    });
+  }, [records, dateOrder]);
 
   const openNewRecordModal = () => {
     setDraft({
@@ -224,7 +252,51 @@ export function ClinicalRecordTab({ patientId }: Props) {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="relative">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setIsOrderMenuOpen((current) => !current)}
+            title="Ordenar registros por data"
+          >
+            <ArrowDownWideNarrow className="mr-2 h-4 w-4" />
+            Ordenar
+          </Button>
+
+          {isOrderMenuOpen && (
+            <div className="absolute right-0 top-11 z-30 w-72 overflow-hidden rounded-xl border border-border bg-white p-1.5 shadow-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  setDateOrder("newest");
+                  setIsOrderMenuOpen(false);
+                }}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-secondary"
+              >
+                <span>Mais recente para o mais antigo</span>
+                {dateOrder === "newest" && (
+                  <Check className="h-4 w-4 text-[#C9A227]" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDateOrder("oldest");
+                  setIsOrderMenuOpen(false);
+                }}
+                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-secondary"
+              >
+                <span>Mais antigo para o mais recente</span>
+                {dateOrder === "oldest" && (
+                  <Check className="h-4 w-4 text-[#C9A227]" />
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
         <Button
           type="button"
           className="bg-[#C9A227] font-semibold text-white hover:bg-[#b59122]"
@@ -250,7 +322,7 @@ export function ClinicalRecordTab({ patientId }: Props) {
           </div>
         ) : (
           <div className="divide-y divide-border">
-            {records.map((record) => {
+            {orderedRecords.map((record) => {
               const observations = getVisibleNotes(record.notes);
 
               return (
