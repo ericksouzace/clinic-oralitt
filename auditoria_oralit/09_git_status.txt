@@ -1,7 +1,0 @@
-=== STATUS DO GIT ===
-?? AUDITORIA_5_MUDANCAS_ORALIT.txt
-?? auditoria_oralit/
-?? src/components/clinical-record/ClinicalRecordTab.tsx.backup-20260801-214850
-?? src/components/treatment-plan/TreatmentPlanTab.tsx.backup-20260801-214850
-?? src/lib/db.ts.backup-20260801-214850
-?? src/lib/store.ts.backup-20260801-214850

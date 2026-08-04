@@ -42,3 +42,10 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Arquivos temporários gerados durante alterações
+*.backup-*
+auditoria_oralit/
+AUDITORIA_*.txt
+AUDITORIA_*.tar.gz
+EXECUTAR_NO_SUPABASE_*.sql
