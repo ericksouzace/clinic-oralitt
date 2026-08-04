@@ -7,9 +7,6 @@ import {
   Edit3,
   Eye,
   Users,
-  Bell,
-  AlertTriangle,
-  CalendarClock,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
@@ -564,61 +561,52 @@ function PacientesPage() {
                     mode="button"
                   />
 
-                  <div
-                    className={`rounded-xl border px-3 py-2.5 ${
-                      patientBalance > 0.009
-                        ? "border-emerald-200 bg-emerald-50"
-                        : patientBalance < -0.009
-                          ? "border-rose-200 bg-rose-50"
-                          : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div
-                          className={`text-[10px] font-extrabold uppercase tracking-wide ${
-                            patientBalance > 0.009
-                              ? "text-emerald-700"
-                              : patientBalance < -0.009
-                                ? "text-rose-700"
-                                : "text-slate-500"
-                          }`}
-                        >
-                          Saldo financeiro
+                  {(statusFilter === "saldo positivo" ||
+                    statusFilter === "saldo negativo") && (
+                    <div
+                      className={`rounded-xl border px-3 py-2.5 ${
+                        patientBalance > 0.009
+                          ? "border-emerald-200 bg-emerald-50"
+                          : "border-rose-200 bg-rose-50"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div
+                            className={`text-[10px] font-extrabold uppercase tracking-wide ${
+                              patientBalance > 0.009
+                                ? "text-emerald-700"
+                                : "text-rose-700"
+                            }`}
+                          >
+                            Saldo financeiro
+                          </div>
+
+                          <div
+                            className={`mt-0.5 text-sm font-extrabold ${
+                              patientBalance > 0.009
+                                ? "text-emerald-700"
+                                : "text-rose-700"
+                            }`}
+                          >
+                            {formatPatientBalance(patientBalance)}
+                          </div>
                         </div>
 
                         <div
-                          className={`mt-0.5 text-sm font-extrabold ${
+                          className={`text-[10px] font-bold ${
                             patientBalance > 0.009
                               ? "text-emerald-700"
-                              : patientBalance < -0.009
-                                ? "text-rose-700"
-                                : "text-slate-600"
+                              : "text-rose-700"
                           }`}
                         >
-                          {formatPatientBalance(
-                            patientBalance,
-                          )}
+                          {patientBalance > 0.009
+                            ? "Crédito"
+                            : "Pendente"}
                         </div>
-                      </div>
-
-                      <div
-                        className={`text-[10px] font-bold ${
-                          patientBalance > 0.009
-                            ? "text-emerald-700"
-                            : patientBalance < -0.009
-                              ? "text-rose-700"
-                              : "text-slate-500"
-                        }`}
-                      >
-                        {patientBalance > 0.009
-                          ? "Crédito"
-                          : patientBalance < -0.009
-                            ? "Pendente"
-                            : "Zerado"}
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {primaryReminder && (
                     <Link

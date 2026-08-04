@@ -15,6 +15,10 @@ import {
   Trash2,
   Clock,
   MessageCircle,
+  Bell,
+  AlertTriangle,
+  CalendarClock,
+  ChevronRight,
 } from "lucide-react";
 import AppLayout from "@/components/AppLayout";
 import {
@@ -44,6 +48,7 @@ import {
   useBudgets,
   usePayments,
   useClinicalRecords,
+  usePatientReminders,
 } from "@/lib/db";
 import {
   Dialog,
@@ -78,6 +83,50 @@ function calcAge(birthDate: string | undefined): number | null {
   return age;
 }
 
+
+function reminderToday() {
+  const date = new Date();
+  const offset = date.getTimezoneOffset() * 60_000;
+
+  return new Date(date.getTime() - offset)
+    .toISOString()
+    .split("T")[0];
+}
+
+function reminderDate(value: string) {
+  return new Date(`${value}T12:00:00`);
+}
+
+function reminderDifference(value: string) {
+  const today = reminderDate(reminderToday());
+  const target = reminderDate(value);
+
+  return Math.round(
+    (target.getTime() - today.getTime()) / 86_400_000,
+  );
+}
+
+function reminderDateLabel(value: string) {
+  return reminderDate(value).toLocaleDateString("pt-BR");
+}
+
+function reminderProximityLabel(value: string) {
+  const difference = reminderDifference(value);
+
+  if (difference < 0) {
+    const days = Math.abs(difference);
+
+    return `Vencido há ${days} ${
+      days === 1 ? "dia" : "dias"
+    }`;
+  }
+
+  if (difference === 0) return "Para hoje";
+  if (difference === 1) return "Para amanhã";
+
+  return `Em ${difference} dias`;
+}
+
 const TAB_MAP = {
   resumo: "Resumo",
   "dados-pessoais": "Dados pessoais",
@@ -106,6 +155,7 @@ function PatientProfilePage() {
   const [budgets] = useBudgets(patientId);
   const [payments] = usePayments(patientId);
   const [clinicalRecords] = useClinicalRecords(patientId);
+  const [patientReminders] = usePatientReminders(patientId);
 
   // ── Financial and Clinical Calculations for Resume ───────────────────────
   const approvedBudgets = budgets ? budgets.filter((b) => b.status === "aprovado") : [];
@@ -239,17 +289,182 @@ function PatientProfilePage() {
 
   const age = calcAge(patient.birthDate);
 
+  const activeReminders = patientReminders
+    .filter(
+      (reminder) =>
+        reminder.status === "pendente" ||
+        reminder.status === "agendado",
+    )
+    .sort((a, b) => {
+      const dateCompare =
+        a.reminderDate.localeCompare(b.reminderDate);
+
+      if (dateCompare !== 0) return dateCompare;
+
+      const priorityWeight = {
+        urgente: 0,
+        alta: 1,
+        normal: 2,
+        baixa: 3,
+      };
+
+      return (
+        priorityWeight[a.priority] -
+        priorityWeight[b.priority]
+      );
+    });
+
+  const primaryReminder = activeReminders[0];
+  const additionalReminders = Math.max(
+    0,
+    activeReminders.length - 1,
+  );
+
   return (
     <AppLayout>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6">
         <Button
           variant="outline"
           onClick={() => router.navigate({ to: "/pacientes" })}
           className="h-9 px-3 text-xs"
         >
-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Voltar
         </Button>
       </div>
+
+      <Card className="mb-6 overflow-hidden border border-border bg-white p-0">
+        <div className="flex flex-col gap-5 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="truncate font-display text-2xl font-bold text-foreground">
+                {patient.fullName}
+              </h1>
+
+              <Badge
+                variant={
+                  patient.status === "em tratamento"
+                    ? "success"
+                    : patient.status === "em acompanhamento"
+                      ? "warning"
+                      : "secondary"
+                }
+                className="capitalize"
+              >
+                {patient.status}
+              </Badge>
+            </div>
+
+            {age !== null && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {age} anos
+              </p>
+            )}
+          </div>
+
+          {primaryReminder ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("lembretes")}
+              className={`group w-full rounded-2xl border p-4 text-left transition hover:shadow-sm lg:max-w-[520px] ${
+                reminderDifference(
+                  primaryReminder.reminderDate,
+                ) < 0
+                  ? "border-rose-200 bg-rose-50"
+                  : reminderDifference(
+                        primaryReminder.reminderDate,
+                      ) <= 7
+                    ? "border-amber-300 bg-amber-50"
+                    : "border-yellow-200 bg-yellow-50"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
+                    reminderDifference(
+                      primaryReminder.reminderDate,
+                    ) < 0
+                      ? "bg-rose-100 text-rose-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}
+                >
+                  {reminderDifference(
+                    primaryReminder.reminderDate,
+                  ) < 0 ? (
+                    <AlertTriangle className="h-4 w-4" />
+                  ) : (
+                    <Bell className="h-4 w-4" />
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={`text-[11px] font-extrabold uppercase tracking-wide ${
+                      reminderDifference(
+                        primaryReminder.reminderDate,
+                      ) < 0
+                        ? "text-rose-700"
+                        : "text-amber-800"
+                    }`}
+                  >
+                    {reminderProximityLabel(
+                      primaryReminder.reminderDate,
+                    )}
+                  </div>
+
+                  <div className="mt-0.5 truncate text-sm font-bold text-foreground">
+                    {primaryReminder.title}
+                  </div>
+
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <CalendarClock className="h-3.5 w-3.5" />
+                      {reminderDateLabel(
+                        primaryReminder.reminderDate,
+                      )}
+                    </span>
+
+                    {additionalReminders > 0 && (
+                      <span className="font-semibold">
+                        +{additionalReminders}{" "}
+                        {additionalReminders === 1
+                          ? "outro lembrete"
+                          : "outros lembretes"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
+              </div>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setActiveTab("lembretes")}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-secondary/20 px-4 py-3 text-left transition hover:border-gold/40 hover:bg-gold/5 lg:max-w-[420px]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+                  <Bell className="h-4 w-4" />
+                </div>
+
+                <div>
+                  <div className="text-sm font-semibold text-foreground">
+                    Nenhum lembrete pendente
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    Clique para abrir os lembretes do paciente.
+                  </div>
+                </div>
+              </div>
+
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+      </Card>
 
       {/* Anamnesis Modal */}
       {anamnesisDraft && (
