@@ -7,6 +7,7 @@ import {
   Edit3,
   Eye,
   Users,
+  SlidersHorizontal,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
@@ -349,33 +350,42 @@ function PacientesPage() {
             </div>
 
             <div className="space-y-2">
-              <div className="text-sm font-semibold text-muted-foreground">
-                Filtrar status
+              <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                <SlidersHorizontal className="h-4 w-4 text-gold" />
+                <span>Filtrar por</span>
               </div>
 
               <Select
+                aria-label="Filtrar pacientes"
+                title="Filtrar pacientes por situação clínica ou financeira"
                 className="h-12 w-full rounded-2xl border-gold/30 bg-white shadow-sm"
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value as any)}
+                onChange={(event) =>
+                  setStatusFilter(
+                    event.target.value as PatientFilter,
+                  )
+                }
               >
-                <option value="todos">Todos os status</option>
+                <option value="todos">
+                  Todos os pacientes
+                </option>
 
-                <optgroup label="Situação do paciente">
-                  {PATIENT_STATUS.map((s) => (
-                    <option key={s} value={s}>
-                      {s.charAt(0).toUpperCase() +
-                        s.slice(1)}
+                <optgroup label="PACIENTES">
+                  {PATIENT_STATUS.map((status) => (
+                    <option key={status} value={status}>
+                      {status.charAt(0).toUpperCase() +
+                        status.slice(1)}
                     </option>
                   ))}
                 </optgroup>
 
-                <optgroup label="Situação financeira">
+                <optgroup label="FINANCEIRO">
                   <option value="saldo positivo">
-                    Saldo positivo
+                    Saldo positivo — crédito
                   </option>
 
                   <option value="saldo negativo">
-                    Saldo negativo
+                    Saldo negativo — pendência
                   </option>
                 </optgroup>
               </Select>
