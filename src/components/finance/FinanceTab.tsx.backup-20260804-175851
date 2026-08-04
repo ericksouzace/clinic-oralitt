@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowDownWideNarrow,
-  Check,
   CheckCircle2,
   CircleDollarSign,
   Plus,
@@ -83,8 +81,6 @@ export function FinanceTab({ patientId }: { patientId: string }) {
   const [deletingPaymentId, setDeletingPaymentId] = useState<string | null>(null);
   const [invoiceBusy, setInvoiceBusy] = useState(false);
   const [invoicePreference, setInvoicePreference] = useState<boolean | null>(null);
-  const [dateOrder, setDateOrder] = useState<"newest" | "oldest">("newest");
-  const [isOrderMenuOpen, setIsOrderMenuOpen] = useState(false);
 
   useEffect(() => {
     setInvoicePreference(patient?.invoicePreference ?? null);
@@ -126,23 +122,11 @@ export function FinanceTab({ patientId }: { patientId: string }) {
     }));
 
     return [...procedureMovements, ...paymentMovements].sort((a, b) => {
-      const dateA = String(a.date || "");
-      const dateB = String(b.date || "");
-      const createdA = String(a.createdAt || "");
-      const createdB = String(b.createdAt || "");
-
-      const dateCompare =
-        dateOrder === "newest"
-          ? dateB.localeCompare(dateA)
-          : dateA.localeCompare(dateB);
-
+      const dateCompare = String(b.date || "").localeCompare(String(a.date || ""));
       if (dateCompare !== 0) return dateCompare;
-
-      return dateOrder === "newest"
-        ? createdB.localeCompare(createdA)
-        : createdA.localeCompare(createdB);
+      return String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
     });
-  }, [clinicalRecords, payments, dateOrder]);
+  }, [clinicalRecords, payments]);
 
   const openPaymentModal = () => {
     setPaymentDate(today());
@@ -267,74 +251,26 @@ export function FinanceTab({ patientId }: { patientId: string }) {
 
   return (
     <div className="space-y-5">
-      <div className="space-y-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <WalletCards className="h-5 w-5 text-[#C9A227]" />
-              <h2 className="font-display text-lg font-bold text-foreground">
-                Procedimentos realizados
-              </h2>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Extrato com procedimentos executados e pagamentos recebidos.
-            </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <WalletCards className="h-5 w-5 text-[#C9A227]" />
+            <h2 className="font-display text-lg font-bold text-foreground">
+              Procedimentos realizados
+            </h2>
           </div>
-
-          <Button
-            type="button"
-            className="bg-[#C9A227] font-semibold text-white hover:bg-[#b59122]"
-            onClick={openPaymentModal}
-          >
-            <Plus className="mr-2 h-4 w-4" /> Adicionar pagamento
-          </Button>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Extrato com procedimentos executados e pagamentos recebidos.
+          </p>
         </div>
 
-        <div className="flex justify-start">
-          <div className="relative">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsOrderMenuOpen((current) => !current)}
-              title="Ordenar extrato por data"
-            >
-              <ArrowDownWideNarrow className="mr-2 h-4 w-4" />
-              Ordenar
-            </Button>
-
-            {isOrderMenuOpen && (
-              <div className="absolute left-0 top-11 z-30 w-72 overflow-hidden rounded-xl border border-border bg-white p-1.5 shadow-xl">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDateOrder("newest");
-                    setIsOrderMenuOpen(false);
-                  }}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-secondary"
-                >
-                  <span>Mais recente para o mais antigo</span>
-                  {dateOrder === "newest" && (
-                    <Check className="h-4 w-4 text-[#C9A227]" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDateOrder("oldest");
-                    setIsOrderMenuOpen(false);
-                  }}
-                  className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-secondary"
-                >
-                  <span>Mais antigo para o mais recente</span>
-                  {dateOrder === "oldest" && (
-                    <Check className="h-4 w-4 text-[#C9A227]" />
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <Button
+          type="button"
+          className="bg-[#C9A227] font-semibold text-white hover:bg-[#b59122]"
+          onClick={openPaymentModal}
+        >
+          <Plus className="mr-2 h-4 w-4" /> Adicionar pagamento
+        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

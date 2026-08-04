@@ -1,0 +1,219 @@
+=== FICHA CLÍNICA ===
+54-  while ((match = LINK_MARKER_REGEX.exec(text)) !== null) {
+55-    ids.push(match[1]);
+56-  }
+57-  LINK_MARKER_REGEX.lastIndex = 0;
+58-  return ids;
+59-}
+60-
+61-function formatDate(value: string) {
+62-  if (!value) return "—";
+63-  return new Date(`${value}T00:00:00`).toLocaleDateString("pt-BR");
+64-}
+65-
+66-export function ClinicalRecordTab({ patientId }: Props) {
+67-  const [records, error, loading, tablesMissing, refetch] = useClinicalRecords(patientId);
+68-  const [isModalOpen, setIsModalOpen] = useState(false);
+69-  const [draft, setDraft] = useState<Partial<ClinicalRecord>>({});
+70-  const [selectTeeth, setSelectTeeth] = useState(false);
+71-  const [linkMarkers, setLinkMarkers] = useState("");
+72-  const [saving, setSaving] = useState(false);
+73-  const [deletingId, setDeletingId] = useState<string | null>(null);
+74:  const [dateOrder, setDateOrder] = useState<"newest" | "oldest">("newest");
+75-  const [isOrderMenuOpen, setIsOrderMenuOpen] = useState(false);
+76-
+77:  const orderedRecords = useMemo(() => {
+78-    return [...records].sort((a, b) => {
+79-      const dateA = new Date(`${a.recordDate}T00:00:00`).getTime();
+80-      const dateB = new Date(`${b.recordDate}T00:00:00`).getTime();
+81-
+82-      if (dateA !== dateB) {
+83:        return dateOrder === "newest"
+84-          ? dateB - dateA
+85-          : dateA - dateB;
+86-      }
+87-
+88-      const createdA = new Date(a.createdAt || 0).getTime();
+89-      const createdB = new Date(b.createdAt || 0).getTime();
+90-
+91:      return dateOrder === "newest"
+92-        ? createdB - createdA
+93-        : createdA - createdB;
+94-    });
+95:  }, [records, dateOrder]);
+96-
+97-  const openNewRecordModal = () => {
+98-    setDraft({
+99-      recordDate: getToday(),
+100-      description: "",
+101-      teeth: [],
+102-      chargedAmount: 0,
+103-      notes: "",
+104-      realCost: 0,
+105-      estimatedProfit: 0,
+106-    });
+107-    setSelectTeeth(false);
+108-    setLinkMarkers("");
+109-    setIsModalOpen(true);
+110-  };
+111-
+112-  const openEditRecordModal = (record: ClinicalRecord) => {
+113-    setDraft({
+114-      ...record,
+115-      notes: getVisibleNotes(record.notes),
+116-    });
+117-    setSelectTeeth(Boolean(record.teeth && record.teeth.length > 0));
+118-    setLinkMarkers(getLinkMarkers(record.notes));
+119-    setIsModalOpen(true);
+120-  };
+121-
+122-  const toggleTooth = (tooth: string) => {
+123-    setDraft((current) => {
+124-      const teeth = current.teeth || [];
+125-      return {
+126-        ...current,
+127-        teeth: teeth.includes(tooth)
+128-          ? teeth.filter((item) => item !== tooth)
+129-          : [...teeth, tooth],
+130-      };
+131-    });
+132-  };
+133-
+134-  const handleSave = async () => {
+135-    if (saving) return;
+136-
+137-    if (!draft.recordDate) {
+138-      toast.error("Informe a data.");
+139-      return;
+140-    }
+--
+241-      </div>
+242-    );
+243-  }
+244-
+245-  if (error) {
+246-    return (
+247-      <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center text-rose-700">
+248-        {error}
+249-      </div>
+250-    );
+251-  }
+252-
+253-  return (
+254-    <div className="space-y-5">
+255-      <div className="flex flex-wrap items-center justify-end gap-2">
+256-        <div className="relative">
+257-          <Button
+258-            type="button"
+259-            variant="outline"
+260-            onClick={() => setIsOrderMenuOpen((current) => !current)}
+261:            title="Ordenar registros por data"
+262-          >
+263-            <ArrowDownWideNarrow className="mr-2 h-4 w-4" />
+264:            Ordenar
+265-          </Button>
+266-
+267-          {isOrderMenuOpen && (
+268-            <div className="absolute right-0 top-11 z-30 w-72 overflow-hidden rounded-xl border border-border bg-white p-1.5 shadow-xl">
+269-              <button
+270-                type="button"
+271-                onClick={() => {
+272-                  setDateOrder("newest");
+273-                  setIsOrderMenuOpen(false);
+274-                }}
+275-                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-secondary"
+276-              >
+277-                <span>Mais recente para o mais antigo</span>
+278:                {dateOrder === "newest" && (
+279-                  <Check className="h-4 w-4 text-[#C9A227]" />
+280-                )}
+281-              </button>
+282-
+283-              <button
+284-                type="button"
+285-                onClick={() => {
+286-                  setDateOrder("oldest");
+287-                  setIsOrderMenuOpen(false);
+288-                }}
+289-                className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition hover:bg-secondary"
+290-              >
+291-                <span>Mais antigo para o mais recente</span>
+292:                {dateOrder === "oldest" && (
+293-                  <Check className="h-4 w-4 text-[#C9A227]" />
+294-                )}
+295-              </button>
+296-            </div>
+297-          )}
+298-        </div>
+299-
+300-        <Button
+301-          type="button"
+302-          className="bg-[#C9A227] font-semibold text-white hover:bg-[#b59122]"
+303-          onClick={openNewRecordModal}
+304-        >
+305-          <Plus className="mr-2 h-4 w-4" />
+306:          Adicionar registro
+307-        </Button>
+308-      </div>
+309-
+310-      <Card className="overflow-hidden border border-border bg-white p-0">
+311-        <div className="grid grid-cols-[140px_minmax(0,1fr)_minmax(120px,190px)_140px_88px] items-center gap-3 border-b border-border bg-secondary/30 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+312-          <span>Data</span>
+313-          <span>Procedimento</span>
+314-          <span>Dentes</span>
+315-          <span className="text-right">Valor</span>
+316-          <span className="text-right">Ações</span>
+317-        </div>
+318-
+319-        {records.length === 0 ? (
+320-          <div className="p-10 text-center text-sm text-muted-foreground">
+321-            Nenhum registro na ficha clínica.
+322-          </div>
+323-        ) : (
+324-          <div className="divide-y divide-border">
+325:            {orderedRecords.map((record) => {
+326-              const observations = getVisibleNotes(record.notes);
+327-
+328-              return (
+329-                <div
+330-                  key={record.id}
+331-                  className="grid grid-cols-[140px_minmax(0,1fr)_minmax(120px,190px)_140px_88px] items-center gap-3 px-4 py-3"
+332-                >
+333-                  <span className="text-sm font-medium text-foreground">
+334-                    {formatDate(record.recordDate)}
+335-                  </span>
+336-
+337-                  <div className="min-w-0">
+338-                    <div className="truncate text-sm font-semibold text-foreground">
+339-                      {record.description || record.procedureName || "Procedimento"}
+340-                    </div>
+341-                    {observations && (
+342-                      <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+343-                        {observations}
+344-                      </div>
+345-                    )}
+346-                  </div>
+347-
+348-                  <span className="text-sm text-muted-foreground">
+349-                    {record.teeth && record.teeth.length > 0
+350-                      ? record.teeth.join(", ")
+351-                      : "—"}
+352-                  </span>
+353-
+354-                  <span className="text-right text-sm font-semibold text-[#8A6A16]">
+355-                    {formatCurrency(Number(record.chargedAmount || 0))}
+356-                  </span>
+357-
+358-                  <div className="flex justify-end gap-1">
+359-                    <Button
+360-                      type="button"
+361-                      variant="ghost"
+362-                      size="sm"
+363-                      className="h-8 w-8 p-0"
+364-                      onClick={() => openEditRecordModal(record)}
+365-                    >
+366-                      <Edit3 className="h-4 w-4" />
+367-                    </Button>
+368-                    <Button
+369-                      type="button"
+370-                      variant="ghost"

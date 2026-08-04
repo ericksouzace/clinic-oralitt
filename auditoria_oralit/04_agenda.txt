@@ -1,0 +1,1279 @@
+=== AGENDA ===
+1-import React, { useState, useMemo, useEffect } from "react";
+2-import { createFileRoute, useRouter } from "@tanstack/react-router";
+3-import AppLayout from "@/components/AppLayout";
+4-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+5-import {
+6-  useAppointments,
+7-  saveAppointment,
+8-  deleteAppointment,
+9-  usePatients,
+10-  useProcedures,
+11-  useSupplies,
+12-  saveClinicalRecord,
+13-  savePayment,
+14-} from "@/lib/db";
+15-import { supabase } from "@/integrations/supabase/client";
+16:import { Appointment, AppointmentStatus, uid, ClinicalRecord, ClinicalRecordSupply } from "@/lib/store";
+17-import { toast } from "sonner";
+18-import {
+19-  Calendar, Plus, Search, Clock, Activity,
+20-  CheckCircle, XCircle, AlertTriangle, Filter, Trash2, DollarSign, Package, Stethoscope
+21-} from "lucide-react";
+22-import { Input, Label, Select, Textarea } from "@/components/ui-bits";
+23-import { AgendaCalendar } from "@/components/agenda/AgendaCalendar";
+24-import { DayAppointmentsList } from "@/components/agenda/DayAppointmentsList";
+25-import { sendWhatsAppMessage, getWhatsAppTemplates, renderWhatsAppTemplate } from "@/lib/whatsapp";
+26-
+27-// ─── Route ───────────────────────────────────────────────────────────────────
+28-
+29-export const Route = createFileRoute("/agenda")({
+30-  component: AgendaPage,
+31-});
+32-
+33-// ─── Helpers ─────────────────────────────────────────────────────────────────
+34-
+35-function cleanPhoneNumber(phone: string): string {
+36-  const cleaned = phone.replace(/\D/g, "");
+37-  if (cleaned.length === 0) return "";
+38-  if (cleaned.length <= 11) return "55" + cleaned;
+39-  return cleaned;
+40-}
+41-
+42-// ─── Main Page ────────────────────────────────────────────────────────────────
+43-
+44-export function AgendaPage() {
+45-  const router = useRouter();
+46-
+47-  // ── Data ──────────────────────────────────────────────────────────────────
+48-  const [appointments, loading, tablesMissing, refetchAppointments] =
+49-    useAppointments();
+50-  const [patients] = usePatients();
+51-  const [procedures] = useProcedures();
+52-  const [supplies] = useSupplies();
+53-
+54-  // ── Calendar state ────────────────────────────────────────────────────────
+55-  const todayStr = new Date().toISOString().split("T")[0];
+56-  const [selectedDate, setSelectedDate] = useState(todayStr);
+57-  // viewMonth is always the first day of the displayed month
+58-  const [viewMonth, setViewMonth] = useState(() => {
+59-    const [y, m] = todayStr.split("-");
+60-    return `${y}-${m}-01`;
+61-  });
+62-
+63-  // ── Filter state ──────────────────────────────────────────────────────────
+64-  const [searchQuery, setSearchQuery] = useState("");
+65:  const [filterStatus, setFilterStatus] = useState("");
+66-
+67-  // ── Modal state ───────────────────────────────────────────────────────────
+68-  const [isModalOpen, setIsModalOpen] = useState(false);
+69-  const [draft, setDraft] = useState<Partial<Appointment>>({});
+70-  const [saving, setSaving] = useState(false);
+71-  const [selectedPatientId, setSelectedPatientId] = useState("");
+72:  const [patientPlans, setPatientPlans] = useState<any[]>([]);
+73-
+74-  // ── Completion Flow Modal States ──────────────────────────────────────────
+75-  const [completionAppt, setCompletionAppt] = useState<Appointment | null>(null);
+76-  const [isCompletionModalOpen, setIsCompletionModalOpen] = useState(false);
+77-  const [completionStep, setCompletionStep] = useState(1);
+78-  const [compDate, setCompDate] = useState("");
+79-  const [compDescription, setCompDescription] = useState("");
+80-  const [compTeeth, setCompTeeth] = useState("");
+81-  const [compSignature, setCompSignature] = useState("");
+82-  const [compProcId, setCompProcId] = useState("");
+83-  const [compSupplies, setCompSupplies] = useState<any[]>([]);
+84-  const [compChargedAmount, setCompChargedAmount] = useState<number>(0);
+85:  const [compPaymentStatus, setCompPaymentStatus] = useState<"pago" | "pendente">("pago");
+86-  const [compPaymentMethod, setCompPaymentMethod] = useState("Pix");
+87-  const [compDueDate, setCompDueDate] = useState("");
+88-  const [selSupplyId, setSelSupplyId] = useState("");
+89-  const [selSupplyQty, setSelSupplyQty] = useState(1);
+90-
+91-  // Sync completion flow states when completionAppt changes
+92-  useEffect(() => {
+93-    if (completionAppt) {
+94-      setCompletionStep(1);
+95-      setCompDate(completionAppt.appointmentDate || new Date().toISOString().split("T")[0]);
+96-      setCompDescription(completionAppt.notes || `Consulta concluída: ${completionAppt.title}`);
+97-      setCompTeeth("");
+98-      setCompSignature("");
+99-      setCompProcId(completionAppt.procedureId || "");
+100-      setCompSupplies([]);
+101:      setCompPaymentStatus("pago");
+102-      setCompPaymentMethod("Pix");
+103-      setCompDueDate(new Date().toISOString().split("T")[0]);
+104-      
+105-      const proc = procedures.find(p => p.id === completionAppt.procedureId);
+106-      setCompChargedAmount(proc && proc.suggestedPrice !== undefined ? proc.suggestedPrice : 0);
+107-    }
+108-  }, [completionAppt, procedures]);
+109-
+110-  async function handleProcChange(procId: string) {
+111-    setCompProcId(procId);
+112-    const proc = procedures.find(p => p.id === procId);
+113-    setCompChargedAmount(proc && proc.suggestedPrice !== undefined ? proc.suggestedPrice : 0);
+114-
+115-    if (!procId) {
+116-      setCompSupplies([]);
+117-      return;
+118-    }
+119-
+120-    try {
+121-      const { data, error } = await supabase
+122-        .from("procedure_supplies")
+123-        .select("*, supplies(*)")
+124-        .eq("procedure_id", procId);
+125-
+126-      if (error) throw error;
+127-
+128-      if (data) {
+129-        const items = data.map((ps: any) => {
+130-          const s = ps.supplies;
+131-          const unitCost = s && s.package_cost && s.yield_quantity ? (s.package_cost / s.yield_quantity) : 0;
+132-          return {
+133-            id: `temp-${uid()}`,
+134-            supplyId: ps.supply_id,
+135-            supplyName: s?.name || "Insumo",
+136-            quantityUsed: ps.quantity || 1,
+137-            unitCost: unitCost,
+138-            totalCost: unitCost * (ps.quantity || 1),
+139-            stock: s?.stock_quantity ?? 0,
+140-          };
+141-        });
+142-        setCompSupplies(items);
+143-      }
+144-    } catch (err) {
+145-      console.error("Error loading procedure supplies:", err);
+146-      toast.error("Erro ao carregar insumos do procedimento.");
+147-    }
+148-  }
+149-
+150-  function handleAddSupply() {
+151-    if (!selSupplyId) return;
+152-    const supply = supplies.find(s => s.id === selSupplyId);
+153-    if (!supply) return;
+154-
+155-    const existing = compSupplies.find(s => s.supplyId === selSupplyId);
+156-    if (existing) {
+157-      updateSupplyQty(existing.id, existing.quantityUsed + selSupplyQty);
+158-      setSelSupplyId("");
+159-      setSelSupplyQty(1);
+160-      return;
+161-    }
+162-
+163-    const unitCost = supply.packCost / (supply.packYield || 1);
+164-    const newSupplyItem = {
+165-      id: `temp-${uid()}`,
+166-      supplyId: supply.id,
+167-      supplyName: supply.name,
+168-      quantityUsed: selSupplyQty,
+169-      unitCost: unitCost,
+170-      totalCost: unitCost * selSupplyQty,
+171-      stock: supply.stock || 0,
+--
+225-        userId: userId,
+226-        patientId: completionAppt.patientId,
+227-        procedureId: compProcId || undefined,
+228-        recordDate: compDate,
+229-        teeth: compTeeth ? compTeeth.split(",").map(t => t.trim()).filter(Boolean) : [],
+230-        description: compDescription,
+231-        notes: completionAppt.notes || "",
+232-        chargedAmount: compChargedAmount,
+233-        realCost: realCost,
+234-        estimatedProfit: estimatedProfit,
+235-        signature: compSignature || undefined,
+236-        createdAt: new Date().toISOString(),
+237-        updatedAt: new Date().toISOString(),
+238-      };
+239-
+240-      const suppliesToSave: ClinicalRecordSupply[] = compSupplies.map(cs => ({
+241-        id: cs.id,
+242-        userId: userId,
+243-        clinicalRecordId: "", // populated by saveClinicalRecord
+244-        patientId: completionAppt.patientId,
+245-        supplyId: cs.supplyId,
+246-        quantityUsed: cs.quantityUsed,
+247-        unitCost: cs.unitCost,
+248-        totalCost: cs.totalCost,
+249-        createdAt: new Date().toISOString(),
+250-      }));
+251-
+252-      await saveClinicalRecord(recordToSave, suppliesToSave);
+253-
+254-      // 3. Save Billing Transaction
+255:      if (compPaymentStatus === "pago") {
+256-        // Direct Payment
+257-        await savePayment({
+258-          patientId: completionAppt.patientId,
+259-          amount: compChargedAmount,
+260-          paymentMethod: compPaymentMethod,
+261-          paymentDate: compDate,
+262-          cardFee: 0,
+263-          netAmount: compChargedAmount,
+264-          notes: `Recebimento de consulta concluída: ${completionAppt.title}`
+265-        }, [
+266-          {
+267-            paymentMethod: compPaymentMethod,
+268-            amount: compChargedAmount
+269-          }
+270-        ]);
+271-      } else {
+272-        // Pending: insert approved Budget and pending PaymentInstallment
+273-        const dbBudget = {
+274-          user_id: userId,
+275-          patient_id: completionAppt.patientId,
+276:          treatment_plan_id: completionAppt.treatmentPlanId || null,
+277-          title: `Orçamento Integrado - ${completionAppt.title}`,
+278-          total_amount: compChargedAmount,
+279-          discount: 0,
+280-          final_amount: compChargedAmount,
+281-          status: "aprovado",
+282-          valid_until: compDueDate || null,
+283-          notes: `Gerado automaticamente na conclusão do atendimento`
+284-        };
+285-
+286-        const { data: budgetData, error: budgetErr } = await supabase
+287-          .from("budgets")
+288-          .insert(dbBudget)
+289-          .select()
+290-          .single();
+291-
+292-        if (budgetErr) throw budgetErr;
+293-        const newBudgetId = budgetData.id;
+294-
+295-        // Insert budget item
+296-        const dbBudgetItem = {
+297-          user_id: userId,
+298-          budget_id: newBudgetId,
+299-          procedure_id: compProcId || null,
+300:          description: procDetail?.name || `Procedimento concluído`,
+301-          quantity: 1,
+302-          unit_price: compChargedAmount,
+303-          total_price: compChargedAmount
+304-        };
+305-
+306-        const { error: itemErr } = await supabase
+307-          .from("budget_items")
+308-          .insert(dbBudgetItem);
+309-
+310-        if (itemErr) throw itemErr;
+311-
+312-        // Insert payment installment
+313-        const dbInstallment = {
+314-          user_id: userId,
+315-          patient_id: completionAppt.patientId,
+316-          budget_id: newBudgetId,
+317-          installment_number: 1,
+318-          amount: compChargedAmount,
+319-          paid_amount: 0,
+320-          remaining_amount: compChargedAmount,
+321-          due_date: compDueDate || compDate,
+322-          status: "pendente",
+323-          notes: `Parcela única gerada na conclusão do atendimento`
+324-        };
+325-
+326-        const { error: installmentErr } = await supabase
+327-          .from("payment_installments")
+328-          .insert(dbInstallment);
+329-
+330-        if (installmentErr) throw installmentErr;
+331-      }
+332-
+333-      // 4. Update Appointment status to "concluído"
+334-      await saveAppointment({
+335-        ...completionAppt,
+336-        status: "concluído",
+337-        updatedAt: new Date().toISOString()
+338-      });
+339-
+340-      toast.success("Atendimento concluído e integrado com sucesso!");
+341-      setIsCompletionModalOpen(false);
+342-      setCompletionAppt(null);
+343-      refetchAppointments();
+344-    } catch (err: any) {
+345-      console.error("Error finalizing completion:", err);
+346-      toast.error("Erro ao finalizar atendimento: " + err.message);
+347-    } finally {
+348-      setSaving(false);
+349-    }
+350-  }
+351-
+352-  // ── Navigate month ────────────────────────────────────────────────────────
+353-  function goPrevMonth() {
+354-    const [y, m] = viewMonth.split("-").map(Number);
+355-    const d = new Date(y, m - 1 - 1, 1);
+356-    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+357-  }
+358-  function goNextMonth() {
+359-    const [y, m] = viewMonth.split("-").map(Number);
+360-    const d = new Date(y, m - 1 + 1, 1);
+361-    setViewMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`);
+362-  }
+363-
+364-  // When user selects a day: update selectedDate, sync viewMonth if needed
+365-  function handleSelectDate(dateStr: string) {
+366-    setSelectedDate(dateStr);
+367-    const [y, m] = dateStr.split("-");
+368-    setViewMonth(`${y}-${m}-01`);
+369-  }
+370-
+371-  // ── Patient plans loader ──────────────────────────────────────────────────
+372:  async function loadPlansForPatient(patientId: string) {
+373-    if (!patientId) { setPatientPlans([]); return; }
+374-    try {
+375-      const { data } = await supabase
+376-        .from("treatment_plans")
+377-        .select("id, title, status")
+378-        .eq("patient_id", patientId);
+379-      setPatientPlans(data || []);
+380-    } catch (err) {
+381-      console.error("Error loading patient plans:", err);
+382-      setPatientPlans([]);
+383-    }
+384-  }
+385-
+386:  async function handlePatientChange(patientId: string) {
+387-    setSelectedPatientId(patientId);
+388:    setDraft(prev => ({ ...prev, patientId, treatmentPlanId: undefined }));
+389:    await loadPlansForPatient(patientId);
+390-  }
+391-
+392-  // ── Open modal helpers ────────────────────────────────────────────────────
+393-  function openNewAppointment(preselectedPatientId?: string) {
+394-    setDraft({
+395-      appointmentDate: selectedDate,
+396-      startTime: "09:00",
+397-      endTime: "10:00",
+398-      status: "agendado",
+399-      type: "consulta",
+400:      whatsappReminder: true,
+401-    });
+402-    setSelectedPatientId(preselectedPatientId || "");
+403-    if (preselectedPatientId) {
+404:      loadPlansForPatient(preselectedPatientId);
+405-    } else {
+406-      setPatientPlans([]);
+407-    }
+408-    setIsModalOpen(true);
+409-  }
+410-
+411-  async function openEditAppointment(app: Appointment) {
+412-    setDraft({
+413-      ...app,
+414-      status: ["agendado", "confirmado", "remarcado"].includes(app.status)
+415-        ? app.status
+416-        : "agendado",
+417-      type: "consulta",
+418-    });
+419-    setSelectedPatientId(app.patientId);
+420:    await loadPlansForPatient(app.patientId);
+421-    setIsModalOpen(true);
+422-  }
+423-
+424-  // ── URL query params listener (from patient profile "Novo agendamento") ──
+425-  React.useEffect(() => {
+426-    if (typeof window === "undefined" || patients.length === 0) return;
+427-    const params = new URLSearchParams(window.location.search);
+428-    const newAppt = params.get("newAppt");
+429-    const patientId = params.get("patientId");
+430-    if (newAppt === "true") {
+431-      params.delete("newAppt");
+432-      params.delete("patientId");
+433-      const newSearch = params.toString();
+434-      window.history.replaceState(null, "", window.location.pathname + (newSearch ? "?" + newSearch : ""));
+435-      openNewAppointment(patientId || undefined);
+436-    }
+437-  }, [patients]);
+438-
+439-  // ── Conflict check ────────────────────────────────────────────────────────
+440-  function checkTimeConflict(app: Partial<Appointment>): boolean {
+441-    if (!app.appointmentDate || !app.startTime || !app.endTime) return false;
+442-    const startNum = app.startTime.replace(":", "");
+443-    const endNum = app.endTime.replace(":", "");
+444-    return appointments.some(a => {
+445-      if (a.id === app.id) return false;
+446-      if (a.appointmentDate !== app.appointmentDate) return false;
+447-      if (a.status === "cancelado") return false;
+448-      const aStart = a.startTime.replace(":", "");
+449-      const aEnd = a.endTime.replace(":", "");
+450-      return startNum < aEnd && endNum > aStart;
+451-    });
+452-  }
+453-
+454-  // ── Save appointment ──────────────────────────────────────────────────────
+455-  async function handleSave() {
+456-    if (!selectedPatientId) { toast.error("Selecione um paciente."); return; }
+457-    if (!draft.appointmentDate || !draft.startTime || !draft.endTime) {
+458-      toast.error("Data, horário inicial e horário final são obrigatórios."); return;
+459-    }
+460-    if (draft.startTime >= draft.endTime) {
+461-      toast.error("O horário final deve ser após o horário inicial.");
+462-      return;
+463-    }
+464-
+465-    if (!draft.title?.trim()) {
+466-      toast.error("Informe o procedimento do agendamento.");
+467-      return;
+468-    }
+469-
+470-    const titleVal = draft.title.trim();
+471-
+472-    const appointmentToSave: Appointment = {
+473-      id: draft.id || `temp-${uid()}`,
+474-      userId: draft.userId || "",
+475-      patientId: selectedPatientId,
+476-      procedureId: draft.procedureId,
+477:      treatmentPlanId: draft.treatmentPlanId,
+478-      title: titleVal,
+479-      appointmentDate: draft.appointmentDate,
+480-      startTime: draft.startTime,
+481-      endTime: draft.endTime,
+482:      status: (draft.status as AppointmentStatus) || "agendado",
+483-      type: "consulta",
+484-      notes: draft.notes,
+485:      whatsappReminder: draft.whatsappReminder ?? false,
+486-      createdAt: draft.createdAt || new Date().toISOString(),
+487-      updatedAt: new Date().toISOString(),
+488-    };
+489-
+490-    if (checkTimeConflict(appointmentToSave)) {
+491-      const ok = window.confirm("⚠️ Já existe outro atendimento neste horário. Deseja continuar mesmo assim?");
+492-      if (!ok) return;
+493-    }
+494-
+495-    try {
+496-      setSaving(true);
+497-      await saveAppointment(appointmentToSave);
+498-      toast.success(draft.id ? "Agendamento atualizado!" : "Agendamento criado!");
+499-      // Navigate selectedDate to the saved date so calendar highlights it
+500-      setSelectedDate(appointmentToSave.appointmentDate);
+501-      const [y, m] = appointmentToSave.appointmentDate.split("-");
+502-      setViewMonth(`${y}-${m}-01`);
+503-      setIsModalOpen(false);
+504-      refetchAppointments();
+505-    } catch (err: any) {
+506-      toast.error("Erro ao salvar: " + err.message);
+507-    } finally {
+508-      setSaving(false);
+509-    }
+510-  }
+511-
+512:  // ── Status change ─────────────────────────────────────────────────────────
+513:  async function handleStatusChange(id: string, newStatus: AppointmentStatus) {
+514-    const original = appointments.find(a => a.id === id);
+515-    if (!original) return;
+516-    try {
+517:      if (newStatus === "concluído") {
+518-        setCompletionAppt(original);
+519-        setIsCompletionModalOpen(true);
+520-        return;
+521-      }
+522:      await saveAppointment({ ...original, status: newStatus, updatedAt: new Date().toISOString() });
+523:      toast.success(`Status alterado para "${newStatus}"!`);
+524-      refetchAppointments();
+525-    } catch (err: any) {
+526-      toast.error("Erro: " + err.message);
+527-    }
+528-  }
+529-
+530-  // ── WhatsApp ──────────────────────────────────────────────────────────────
+531-  async function handleWhatsApp(app: Appointment) {
+532-    const patientDef = patients.find(p => p.id === app.patientId);
+533-    const rawPhone = app.patientPhone || patientDef?.phone || patientDef?.whatsapp || "";
+534-    if (!rawPhone) { 
+535-      toast.error("Paciente sem telefone cadastrado."); 
+536-      return; 
+537-    }
+538-
+539-    const [y, mo, d] = app.appointmentDate.split("-");
+540-    const dateFormatted = `${d}/${mo}/${y}`;
+541-
+542-    const params = new URLSearchParams({
+543-      patientId: app.patientId,
+544-      templateId: "tpl-confirmacao",
+545-      date: dateFormatted,
+546-      time: app.startTime,
+547-      profissional_nome: app.dentistName || "Dentista",
+548-      procedimento_nome: app.title || "Consulta"
+549-    });
+550-
+551-    window.location.href = `/whatsapp?${params.toString()}`;
+552-  }
+553-
+554-  // ── Filtered appointments (respects global filters, ignores date) ─────────
+555-  const filteredAll = useMemo(() => {
+556-    return appointments.filter(app => {
+557-      if (searchQuery) {
+558-        const q = searchQuery.toLowerCase();
+559-        if (!app.patientName?.toLowerCase().includes(q) && !app.title?.toLowerCase().includes(q)) return false;
+560-      }
+561:      if (filterStatus && app.status !== filterStatus) return false;
+562-      return true;
+563-    });
+564:  }, [appointments, searchQuery, filterStatus]);
+565-
+566-  // Appointments for the selected day
+567-  const dayAppointments = useMemo(
+568-    () => filteredAll.filter(a => a.appointmentDate === selectedDate),
+569-    [filteredAll, selectedDate]
+570-  );
+571-
+572-  // ── Stats (based on ALL appointments, not filtered, today only) ───────────
+573-  const stats = useMemo(() => {
+574:    const activeStatuses = new Set([
+575-      "agendado",
+576-      "confirmado",
+577-      "remarcado",
+578-    ]);
+579-
+580-    const todayAppts = appointments.filter(
+581-      (appointment) => appointment.appointmentDate === todayStr,
+582-    );
+583-
+584-    const totalHoje = todayAppts.filter((appointment) =>
+585:      activeStatuses.has(appointment.status),
+586-    ).length;
+587-
+588-    const confirmados = todayAppts.filter(
+589-      (appointment) => appointment.status === "confirmado",
+590-    ).length;
+591-
+592-    const pendentes = todayAppts.filter(
+593-      (appointment) => appointment.status === "agendado",
+594-    ).length;
+595-
+596-    const remarcados = todayAppts.filter(
+597-      (appointment) => appointment.status === "remarcado",
+598-    ).length;
+599-
+600-    const proximo =
+601-      appointments
+602:        .filter((appointment) => activeStatuses.has(appointment.status))
+603-        .filter(
+604-          (appointment) =>
+605-            new Date(
+606-              `${appointment.appointmentDate}T${appointment.startTime}`,
+607-            ) >= new Date(),
+608-        )
+609-        .sort(
+610-          (a, b) =>
+611-            a.appointmentDate.localeCompare(b.appointmentDate) ||
+612-            a.startTime.localeCompare(b.startTime),
+613-        )[0] ?? null;
+614-
+615-    return {
+616-      totalHoje,
+617-      confirmados,
+618-      pendentes,
+619-      remarcados,
+620-      proximo,
+621-    };
+622-  }, [appointments, todayStr]);
+623-
+624-  // ─────────────────────────────────────────────────────────────────────────
+625-  // Fallback: table missing
+626-  // ─────────────────────────────────────────────────────────────────────────
+627-  if (tablesMissing) {
+628-    return (
+629-      <AppLayout>
+630-        <div className="py-12 max-w-4xl mx-auto space-y-6">
+631-          <div className="bg-white border-2 border-dashed border-amber-300 rounded-2xl p-10 text-center flex flex-col items-center">
+632-            <AlertTriangle className="h-16 w-16 text-amber-500 mb-4 animate-bounce" />
+633-            <h2 className="text-2xl font-display font-extrabold text-foreground mb-3">Estrutura de Agenda Necessária</h2>
+634-            <p className="text-muted-foreground text-sm max-w-lg mb-6">
+635-              A tabela de agendamentos no Supabase não está criada ou precisa de colunas adicionais.
+636-              Copie e execute o script abaixo no Supabase SQL Editor.
+637-            </p>
+638-            <div className="text-left w-full bg-slate-900 text-slate-100 rounded-xl p-5 overflow-x-auto text-xs font-mono select-all max-h-[350px] border shadow-inner">
+639-              <p className="text-slate-400 mb-2">-- Execute no Supabase SQL Editor:</p>
+640-              <pre className="whitespace-pre">{`CREATE TABLE IF NOT EXISTS public.appointments (
+641-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+642-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+643-  patient_id uuid NOT NULL REFERENCES public.patients(id) ON DELETE CASCADE,
+644-  procedure_id uuid REFERENCES public.procedures(id) ON DELETE SET NULL,
+645-  treatment_plan_id uuid REFERENCES public.treatment_plans(id) ON DELETE SET NULL,
+646-  title text NOT NULL,
+647-  appointment_date date NOT NULL,
+648-  start_time time NOT NULL,
+649-  end_time time NOT NULL,
+650-  status text NOT NULL DEFAULT 'agendado',
+651-  type text NOT NULL DEFAULT 'consulta',
+652-  notes text,
+653-  whatsapp_reminder boolean NOT NULL DEFAULT false,
+654-  created_at timestamptz NOT NULL DEFAULT now(),
+655-  updated_at timestamptz NOT NULL DEFAULT now()
+656-);
+657-
+658-ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
+659-CREATE POLICY "Users manage own appointments"
+660-  ON public.appointments FOR ALL TO authenticated
+661-  USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+662-
+663--- Se a tabela já existir, adicione apenas os campos ausentes:
+664-ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS treatment_plan_id uuid REFERENCES public.treatment_plans(id) ON DELETE SET NULL;
+665-ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS title text;
+666-ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS type text DEFAULT 'consulta';
+667-ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS whatsapp_reminder boolean DEFAULT false;
+668-UPDATE public.appointments SET title = 'Consulta' WHERE title IS NULL;
+669-ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
+670-            </div>
+671-            <button
+672-              type="button"
+--
+751-              <div className="flex flex-col gap-0.5">
+752-                <span className="font-bold text-sm text-gray-800 truncate">{stats.proximo.patientName}</span>
+753-                <span className="text-[11px] text-[#C9A227] font-semibold flex items-center gap-1">
+754-                  <Clock className="w-3 h-3" />
+755-                  {stats.proximo.appointmentDate.split("-").reverse().join("/")} às {stats.proximo.startTime}
+756-                </span>
+757-              </div>
+758-            ) : (
+759-              <span className="text-xs text-muted-foreground italic">Sem consultas</span>
+760-            )}
+761-          </div>
+762-        </div>
+763-
+764-        {/* ── Filters bar ───────────────────────────────────────────────────── */}
+765-        <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
+766-          <div className="flex flex-wrap gap-3 items-end">
+767-            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+768-              <Filter className="w-3.5 h-3.5" /> Filtros:
+769-            </div>
+770-            {/* Search */}
+771-            <div className="relative flex-1 min-w-[160px] max-w-xs">
+772-              <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+773-              <input
+774-                type="text"
+775-                placeholder="Buscar paciente..."
+776-                value={searchQuery}
+777-                onChange={e => setSearchQuery(e.target.value)}
+778-                className="h-8 w-full rounded-lg border border-input bg-card pl-8 pr-3 text-xs outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+779-              />
+780-            </div>
+781:            {/* Status */}
+782-            <select
+783:              value={filterStatus}
+784:              onChange={e => setFilterStatus(e.target.value)}
+785-              className="h-8 rounded-lg border border-input bg-card px-2 text-xs outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition min-w-[130px]"
+786-            >
+787-              <option value="">Todos os status</option>
+788-              <option value="agendado">Agendado</option>
+789-              <option value="confirmado">Confirmado</option>
+790-              <option value="remarcado">Remarcado</option>
+791-            </select>
+792-            {/* Clear */}
+793:            {(searchQuery || filterStatus) && (
+794-              <button
+795-                type="button"
+796-                onClick={() => {
+797-                  setSearchQuery("");
+798:                  setFilterStatus("");
+799-                }}
+800-                className="h-8 px-3 rounded-lg text-xs font-semibold text-muted-foreground border border-dashed border-border hover:border-red-300 hover:text-red-500 transition-colors"
+801-              >
+802-                Limpar filtros
+803-              </button>
+804-            )}
+805-          </div>
+806-        </div>
+807-
+808-        {/* ── Main 2-column layout ──────────────────────────────────────────── */}
+809-        {loading ? (
+810-          <div className="py-20 text-center text-muted-foreground animate-pulse text-sm">
+811-            Carregando agenda...
+812-          </div>
+813-        ) : (
+814-          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5 items-start">
+815-
+816-            {/* ── Left: Calendar ─────────────────────────────────────────── */}
+817-            <div className="w-full">
+818-              <AgendaCalendar
+819-                viewMonth={viewMonth}
+820-                selectedDate={selectedDate}
+821-                appointments={filteredAll}
+822-                onSelectDate={handleSelectDate}
+823-                onPrevMonth={goPrevMonth}
+824-                onNextMonth={goNextMonth}
+825-              />
+826-            </div>
+827-
+828-            {/* ── Right: Day appointments ────────────────────────────────── */}
+829-            <div className="bg-white border border-border/60 rounded-2xl shadow-sm p-5">
+830-              <DayAppointmentsList
+831-                selectedDate={selectedDate}
+832-                appointments={dayAppointments}
+833-                onOpenNew={() => openNewAppointment()}
+834-                onEdit={openEditAppointment}
+835:                onStatusChange={handleStatusChange}
+836-                onWhatsApp={handleWhatsApp}
+837-                onViewPatient={(patientId) =>
+838-                  router.navigate({ to: `/pacientes/${patientId}` })
+839-                }
+840-              />
+841-            </div>
+842-
+843-          </div>
+844-        )}
+845-
+846-      </div>
+847-
+848-      {/* ── Modal: New / Edit Appointment ──────────────────────────────────── */}
+849-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+850-        <DialogContent className="max-w-xl max-h-[92vh] overflow-y-auto">
+851-          <DialogHeader>
+852-            <DialogTitle className="text-lg font-display font-extrabold">
+853:              {draft.id ? "Editar Agendamento" : "Novo Agendamento"}
+854-            </DialogTitle>
+855-          </DialogHeader>
+856-
+857-          <div className="space-y-4 py-2">
+858-
+859-            {/* Patient */}
+860-            <div>
+861-              <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+862-                Paciente <span className="text-red-500">*</span>
+863-              </label>
+864-              <select
+865-                value={selectedPatientId}
+866:                onChange={e => handlePatientChange(e.target.value)}
+867-                className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+868-              >
+869-                <option value="">Selecione um paciente...</option>
+870-                {patients.map(p => (
+871-                  <option key={p.id} value={p.id}>
+872-                    {p.fullName}{p.whatsapp || p.phone ? ` · ${p.whatsapp || p.phone}` : ""}
+873-                  </option>
+874-                ))}
+875-              </select>
+876-            </div>
+877-
+878-            {/* Date + Times */}
+879-            <div className="grid grid-cols-3 gap-3">
+880-              <div className="col-span-1">
+881-                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+882-                  Data <span className="text-red-500">*</span>
+883-                </label>
+884-                <input
+885-                  type="date"
+886-                  value={draft.appointmentDate || ""}
+887-                  onChange={e => setDraft({ ...draft, appointmentDate: e.target.value })}
+888-                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+889-                />
+890-              </div>
+891-              <div>
+892-                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+893-                  Início <span className="text-red-500">*</span>
+894-                </label>
+895-                <input
+896-                  type="time"
+897-                  value={draft.startTime || ""}
+898-                  onChange={e => setDraft({ ...draft, startTime: e.target.value })}
+899-                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+900-                />
+901-              </div>
+902-              <div>
+903-                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+904-                  Fim <span className="text-red-500">*</span>
+905-                </label>
+906-                <input
+907-                  type="time"
+908-                  value={draft.endTime || ""}
+909-                  onChange={e => setDraft({ ...draft, endTime: e.target.value })}
+910-                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+911-                />
+912-              </div>
+913-            </div>
+914-
+915-            {/* Title */}
+916-            <div>
+917-              <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+918:                Procedimento <span className="text-red-500">*</span>
+919-              </label>
+920-              <input
+921-                type="text"
+922-                placeholder="Ex.: Limpeza, restauração, avaliação..."
+923-                value={draft.title || ""}
+924-                onChange={e => setDraft({ ...draft, title: e.target.value })}
+925-                className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+926-              />
+927-            </div>
+928:            {/* Status */}
+929-            <div>
+930-              <label className="mb-1.5 block text-xs font-semibold text-foreground/80">
+931:                Status
+932-              </label>
+933-              <select
+934-                value={draft.status || "agendado"}
+935-                onChange={(event) =>
+936-                  setDraft({
+937-                    ...draft,
+938:                    status: event.target.value as AppointmentStatus,
+939-                  })
+940-                }
+941-                className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/40"
+942-              >
+943-                <option value="agendado">Agendado</option>
+944-                <option value="confirmado">Confirmado</option>
+945-                <option value="remarcado">Remarcado</option>
+946-              </select>
+947-            </div>
+948-
+949-            {/* Treatment plan (only if patient selected and plans exist) */}
+950:            {selectedPatientId && patientPlans.length > 0 && (
+951-              <div>
+952-                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+953:                  Plano de Tratamento <span className="text-muted-foreground font-normal">(opcional)</span>
+954-                </label>
+955-                <select
+956:                  value={draft.treatmentPlanId || ""}
+957:                  onChange={e => setDraft({ ...draft, treatmentPlanId: e.target.value || undefined })}
+958-                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+959-                >
+960-                  <option value="">Selecione...</option>
+961:                  {patientPlans.map(plan => (
+962-                    <option key={plan.id} value={plan.id}>{plan.title} ({plan.status})</option>
+963-                  ))}
+964-                </select>
+965-              </div>
+966-            )}
+967-
+968-            {/* Notes */}
+969-            <div>
+970-              <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+971:                Observações <span className="text-muted-foreground font-normal">(opcional)</span>
+972-              </label>
+973-              <textarea
+974-                value={draft.notes || ""}
+975-                onChange={e => setDraft({ ...draft, notes: e.target.value })}
+976-                placeholder="Instruções pré-consulta, detalhes do dente ou tratamento..."
+977-                rows={3}
+978-                className="min-h-[80px] w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition resize-none"
+979-              />
+980-            </div>
+981-
+982-            {/* WhatsApp reminder checkbox */}
+983-            <div className="flex items-center gap-2.5 pt-1">
+984-              <input
+985-                type="checkbox"
+986:                id="whatsappReminder"
+987:                checked={draft.whatsappReminder ?? false}
+988:                onChange={e => setDraft({ ...draft, whatsappReminder: e.target.checked })}
+989-                className="h-4 w-4 rounded border-gray-300 accent-[#C9A227]"
+990-              />
+991:              <label htmlFor="whatsappReminder" className="text-xs font-medium text-foreground/80 cursor-pointer select-none">
+992-                Registrar lembrete de WhatsApp para este atendimento
+993-              </label>
+994-            </div>
+995-
+996-          </div>
+997-
+998-          <DialogFooter className="gap-3 mt-4">
+999-            <button
+1000-              type="button"
+1001-              onClick={() => setIsModalOpen(false)}
+1002-              disabled={saving}
+1003-              className="agenda-btn-secondary h-10 px-5 rounded-lg text-sm font-bold border-2 transition-colors disabled:opacity-50"
+1004-            >
+1005-              Cancelar
+1006-            </button>
+1007-            <button
+1008-              type="button"
+1009-              onClick={handleSave}
+1010-              disabled={
+1011-                saving ||
+1012-                !selectedPatientId ||
+1013-                !draft.title?.trim() ||
+1014-                !draft.appointmentDate ||
+1015-                !draft.startTime ||
+1016-                !draft.endTime
+1017-              }
+1018-              title={
+1019-                !selectedPatientId ||
+1020-                !draft.title?.trim() ||
+1021-                !draft.appointmentDate ||
+1022-                !draft.startTime ||
+1023-                !draft.endTime
+1024-                  ? "Preencha paciente, procedimento, data, início e fim."
+1025-                  : ""
+1026-              }
+1027-              className="agenda-btn-primary h-10 px-6 rounded-lg text-sm font-bold transition-colors shadow-sm"
+1028-            >
+1029-              {saving ? "Salvando..." : "Salvar agendamento"}
+1030-            </button>
+1031-          </DialogFooter>
+1032-        </DialogContent>
+1033-      </Dialog>
+1034-
+1035-      {/* ── Modal: Completion Flow (5 Steps) ────────────────────────────────── */}
+1036-      <Dialog open={isCompletionModalOpen} onOpenChange={setIsCompletionModalOpen}>
+1037-        <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto bg-white">
+1038-          <DialogHeader className="border-b pb-3">
+1039-            <DialogTitle className="text-lg font-display font-extrabold flex items-center gap-2">
+1040-              <CheckCircle className="h-5 w-5 text-[#C9A227]" />
+1041-              Concluir Atendimento e Faturar
+1042-            </DialogTitle>
+1043-          </DialogHeader>
+1044-
+1045-          {/* Steps Indicator */}
+1046-          <div className="flex justify-between items-center my-4 border-b pb-4">
+1047-            {[1, 2, 3, 4, 5].map((stepNum) => (
+1048-              <div key={stepNum} className="flex items-center gap-1.5">
+1049-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+1050-                  completionStep === stepNum 
+1051-                    ? "bg-[#C9A227] text-white animate-pulse" 
+1052-                    : completionStep > stepNum 
+1053-                      ? "bg-emerald-600 text-white" 
+1054-                      : "bg-gray-100 text-gray-400"
+1055-                }`}>
+1056-                  {stepNum}
+1057-                </div>
+1058-                <span className={`text-[11px] font-semibold hidden sm:inline ${
+1059-                  completionStep === stepNum ? "text-foreground font-bold" : "text-muted-foreground"
+1060-                }`}>
+1061-                  {stepNum === 1 && "Evolução"}
+1062:                  {stepNum === 2 && "Procedimento"}
+1063-                  {stepNum === 3 && "Insumos"}
+1064-                  {stepNum === 4 && "Financeiro"}
+1065-                  {stepNum === 5 && "Resumo"}
+1066-                </span>
+1067-              </div>
+1068-            ))}
+1069-          </div>
+1070-
+1071-          <div className="py-2 space-y-4">
+1072-            {/* STEP 1: EVOLUÇÃO CLÍNICA */}
+1073-            {completionStep === 1 && (
+1074-              <div className="space-y-4">
+1075-                <div>
+1076-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+1077-                    <Stethoscope className="w-4 h-4 text-[#C9A227]" />
+1078-                    Registro de Evolução Clínica
+1079-                  </h3>
+1080-                  <p className="text-xs text-muted-foreground">Descreva detalhadamente o atendimento realizado.</p>
+1081-                </div>
+1082-                <div>
+1083-                  <Label className="text-xs font-semibold">Descrição do Atendimento *</Label>
+1084-                  <Textarea
+1085:                    placeholder="Procedimento executado, queixas relatadas, diagnóstico, técnica empregada..."
+1086-                    value={compDescription}
+1087-                    onChange={e => setCompDescription(e.target.value)}
+1088-                    rows={4}
+1089-                    className="w-full text-sm rounded-lg border border-gray-300 p-2.5 focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] outline-none"
+1090-                  />
+1091-                </div>
+1092-                <div className="grid grid-cols-2 gap-4">
+1093-                  <div>
+1094-                    <Label className="text-xs font-semibold">Dentes / Região (opcional)</Label>
+1095-                    <Input
+1096-                      placeholder="Ex: 18, 21, quadrante superior..."
+1097-                      value={compTeeth}
+1098-                      onChange={e => setCompTeeth(e.target.value)}
+1099-                      className="h-10 text-sm w-full rounded-lg border border-gray-300 px-3 outline-none"
+1100-                    />
+1101-                  </div>
+1102-                  <div>
+1103-                    <Label className="text-xs font-semibold">Data do Atendimento *</Label>
+1104-                    <Input
+1105-                      type="date"
+1106-                      value={compDate}
+1107-                      onChange={e => setCompDate(e.target.value)}
+1108-                      className="h-10 text-sm w-full rounded-lg border border-gray-300 px-3 outline-none"
+1109-                    />
+1110-                  </div>
+1111-                </div>
+1112-                <div>
+1113-                  <Label className="text-xs font-semibold">Profissional Responsável (Assinatura) *</Label>
+1114-                  <Input
+1115-                    placeholder="Nome do dentista responsável..."
+1116-                    value={compSignature}
+1117-                    onChange={e => setCompSignature(e.target.value)}
+1118-                    className="h-10 text-sm w-full rounded-lg border border-gray-300 px-3 outline-none"
+1119-                  />
+1120-                </div>
+1121-              </div>
+1122-            )}
+1123-
+1124-            {/* STEP 2: PROCEDIMENTO REALIZADO */}
+1125-            {completionStep === 2 && (
+1126-              <div className="space-y-4">
+1127-                <div>
+1128-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+1129-                    <Activity className="w-4 h-4 text-[#C9A227]" />
+1130:                    Procedimento Realizado
+1131-                  </h3>
+1132-                  <p className="text-xs text-muted-foreground">Selecione o procedimento executado para vincular custos e insumos padrão.</p>
+1133-                </div>
+1134-                <div>
+1135:                  <Label className="text-xs font-semibold">Procedimento Clínico</Label>
+1136-                  <select
+1137-                    value={compProcId}
+1138-                    onChange={e => handleProcChange(e.target.value)}
+1139-                    className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+1140-                  >
+1141-                    <option value="">Selecione um procedimento...</option>
+1142-                    {procedures.map(p => (
+1143-                      <option key={p.id} value={p.id}>{p.name}</option>
+1144-                    ))}
+1145-                  </select>
+1146-                </div>
+1147-                {compProcId && (
+1148-                  <div className="p-3 bg-gray-50 border rounded-lg text-xs space-y-1">
+1149-                    <p className="font-semibold text-gray-700">Valores cadastrados para o procedimento:</p>
+1150-                    <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+1151-                      <span>Preço Sugerido: R$ {procedures.find(p => p.id === compProcId)?.suggestedPrice?.toFixed(2) || "0.00"}</span>
+1152-                      <span>Custo Lab/Direto: R$ {((procedures.find(p => p.id === compProcId)?.labCost || 0) + (procedures.find(p => p.id === compProcId)?.otherDirect || 0)).toFixed(2)}</span>
+1153-                    </div>
+1154-                  </div>
+1155-                )}
+1156-              </div>
+1157-            )}
+1158-
+1159-            {/* STEP 3: INSUMOS UTILIZADOS */}
+1160-            {completionStep === 3 && (
+1161-              <div className="space-y-4">
+1162-                <div>
+1163-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+1164-                    <Package className="w-4 h-4 text-[#C9A227]" />
+1165-                    Insumos Utilizados (Baixa de Estoque)
+1166-                  </h3>
+1167-                  <p className="text-xs text-muted-foreground">Confirme ou altere os insumos consumidos. O estoque será deduzido automaticamente.</p>
+1168-                </div>
+1169-
+1170-                {/* Add Custom Supply usage */}
+1171-                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2">
+1172-                  <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">Adicionar Insumo Extra</span>
+1173-                  <div className="flex gap-2 items-end">
+1174-                    <div className="flex-1">
+1175-                      <Label className="text-[10px]">Insumo</Label>
+1176-                      <select
+1177-                        value={selSupplyId}
+1178-                        onChange={e => setSelSupplyId(e.target.value)}
+1179-                        className="h-9 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-2 text-xs outline-none"
+1180-                      >
+1181-                        <option value="">Selecione...</option>
+1182-                        {supplies.map(s => (
+1183-                          <option key={s.id} value={s.id}>{s.name} (Disp: {s.stock ?? 0} {s.unit || "un"})</option>
+1184-                        ))}
+1185-                      </select>
+1186-                    </div>
+1187-                    <div className="w-20">
+1188-                      <Label className="text-[10px]">Qtd</Label>
+1189-                      <Input
+1190-                        type="number"
+1191-                        min="1"
+1192-                        value={selSupplyQty}
+1193-                        onChange={e => setSelSupplyQty(parseInt(e.target.value) || 1)}
+1194-                        className="h-9 text-xs text-center"
+1195-                      />
+1196-                    </div>
+1197-                    <button
+1198-                      type="button"
+1199-                      onClick={handleAddSupply}
+1200-                      disabled={!selSupplyId}
+1201-                      className="h-9 px-3 rounded-lg text-xs font-semibold text-white bg-[#C9A227] hover:bg-[#b59122] disabled:opacity-50 transition"
+1202-                    >
+1203-                      Adicionar
+1204-                    </button>
+1205-                  </div>
+--
+1256-                        ))}
+1257-                      </tbody>
+1258-                    </table>
+1259-                  </div>
+1260-                )}
+1261-              </div>
+1262-            )}
+1263-
+1264-            {/* STEP 4: FINANCEIRO */}
+1265-            {completionStep === 4 && (
+1266-              <div className="space-y-4">
+1267-                <div>
+1268-                  <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+1269-                    <DollarSign className="w-4 h-4 text-[#C9A227]" />
+1270-                    Lançamento Financeiro (Faturamento)
+1271-                  </h3>
+1272-                  <p className="text-xs text-muted-foreground">Configure as informações de cobrança deste atendimento.</p>
+1273-                </div>
+1274-                <div className="grid grid-cols-2 gap-4">
+1275-                  <div>
+1276-                    <Label className="text-xs font-semibold">Valor Cobrado (R$) *</Label>
+1277-                    <Input
+1278-                      type="number"
+1279-                      step="0.01"
+1280-                      value={compChargedAmount || ""}
+1281-                      onChange={e => setCompChargedAmount(parseFloat(e.target.value) || 0)}
+1282-                      className="h-10 text-sm w-full rounded-lg border border-gray-300 px-3 outline-none"
+1283-                    />
+1284-                  </div>
+1285-                  <div>
+1286:                    <Label className="text-xs font-semibold">Status de Pagamento *</Label>
+1287-                    <select
+1288:                      value={compPaymentStatus}
+1289:                      onChange={e => setCompPaymentStatus(e.target.value as "pago" | "pendente")}
+1290-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none"
+1291-                    >
+1292-                      <option value="pago">Pago (À vista / Já recebido)</option>
+1293-                      <option value="pendente">Pendente (A Faturar / Contas a Receber)</option>
+1294-                    </select>
+1295-                  </div>
+1296-                </div>
+1297-
+1298:                {compPaymentStatus === "pago" ? (
+1299-                  <div>
+1300-                    <Label className="text-xs font-semibold">Forma de Pagamento *</Label>
+1301-                    <select
+1302-                      value={compPaymentMethod}
+1303-                      onChange={e => setCompPaymentMethod(e.target.value)}
+1304-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none"
+1305-                    >
+1306-                      <option value="Pix">Pix</option>
+1307-                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+1308-                      <option value="Cartão de Débito">Cartão de Débito</option>
+1309-                      <option value="Dinheiro">Dinheiro</option>
+1310-                      <option value="Boleto">Boleto</option>
+1311-                    </select>
+1312-                  </div>
+1313-                ) : (
+1314-                  <div>
+1315-                    <Label className="text-xs font-semibold">Data de Vencimento da Parcela *</Label>
+1316-                    <Input
+1317-                      type="date"
+1318-                      value={compDueDate}
+1319-                      onChange={e => setCompDueDate(e.target.value)}
+1320-                      className="h-10 text-sm w-full rounded-lg border border-gray-300 px-3 outline-none"
+1321-                    />
+1322-                  </div>
+1323-                )}
+1324-              </div>
+1325-            )}
+1326-
+1327-            {/* STEP 5: RESUMO FINAL */}
+1328-            {completionStep === 5 && (() => {
+1329-              const procDetail = procedures.find(p => p.id === compProcId);
+1330-              const totalSuppliesCost = compSupplies.reduce((sum, item) => sum + item.totalCost, 0);
+1331-              const labCost = procDetail?.labCost || 0;
+1332-              const otherDirect = procDetail?.otherDirect || 0;
+1333-              const realCost = totalSuppliesCost + labCost + otherDirect;
+1334-              const estimatedProfit = compChargedAmount - realCost;
+1335-              const marginPct = compChargedAmount > 0 ? (estimatedProfit / compChargedAmount) * 100 : 0;
+1336-              
+1337-              const lowStockSupplies = compSupplies.filter(item => item.quantityUsed > item.stock);
+1338-
+1339-              return (
+1340-                <div className="space-y-4">
+1341-                  <div>
+1342-                    <h3 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+1343-                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+1344-                      Resumo e Margens do Atendimento
+1345-                    </h3>
+1346-                    <p className="text-xs text-muted-foreground">Revise o resumo financeiro, custos calculados e alertas antes de finalizar.</p>
+1347-                  </div>
+1348-
+1349-                  {/* Summary grid */}
+1350-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+1351-                    <div className="bg-white border rounded-xl p-3 shadow-sm text-center">
+1352-                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">Valor Cobrado</span>
+1353-                      <span className="text-sm font-extrabold text-[#C9A227] block mt-1">R$ {compChargedAmount.toFixed(2)}</span>
+1354-                    </div>
+1355-                    <div className="bg-white border rounded-xl p-3 shadow-sm text-center">
+1356-                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">Custos Insumos</span>
+1357-                      <span className="text-sm font-extrabold text-rose-600 block mt-1">R$ {totalSuppliesCost.toFixed(2)}</span>
+1358-                    </div>
+1359-                    <div className="bg-white border rounded-xl p-3 shadow-sm text-center">
+1360-                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">Lab / Direto</span>
+1361-                      <span className="text-sm font-extrabold text-rose-600 block mt-1">R$ {(labCost + otherDirect).toFixed(2)}</span>
+1362-                    </div>
+1363-                    <div className="bg-white border rounded-xl p-3 shadow-sm text-center">
+1364-                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">Margem Marginal</span>
+1365-                      <span className={`text-sm font-extrabold block mt-1 ${marginPct >= 30 ? 'text-emerald-600' : marginPct > 0 ? 'text-[#C9A227]' : 'text-rose-600'}`}>
+1366-                        {marginPct.toFixed(1)}%
+1367-                      </span>
+1368-                    </div>
+1369-                  </div>
+1370-
+1371-                  {/* Estimated Profit info box */}
+1372-                  <div className={`p-4 rounded-xl border flex justify-between items-center ${estimatedProfit >= 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-800'}`}>
+1373-                    <span className="text-xs font-semibold">Lucro Estimado para a Clínica:</span>
+1374-                    <span className="text-base font-bold">R$ {estimatedProfit.toFixed(2)}</span>
+1375-                  </div>
+1376-
+1377-                  {/* Stock warnings */}
+1378-                  {lowStockSupplies.length > 0 && (
+1379-                    <div className="space-y-2">
+1380-                      <span className="text-[10px] text-amber-600 font-bold uppercase tracking-wider block">⚠️ Alertas de Estoque</span>
+1381-                      <div className="space-y-1.5">
+1382-                        {lowStockSupplies.map(item => (
+1383-                          <div key={item.id} className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg">
+1384-                            <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+1385-                            <span>
+1386-                              Quantidade utilizada de <strong>{item.supplyName}</strong> ({item.quantityUsed}) excede estoque disponível ({item.stock}). O estoque ficará negativo.
+1387-                            </span>
+1388-                          </div>
+1389-                        ))}
+1390-                      </div>
+1391-                    </div>
+1392-                  )}
+1393-
+1394-                  {/* Billing status detail info */}
+1395-                  <div className="p-3 bg-gray-50 border rounded-lg text-xs space-y-1.5">
+1396-                    <p className="font-semibold text-gray-700">Lançamento de Faturamento:</p>
+1397-                    <div className="text-muted-foreground leading-relaxed">
+1398:                      {compPaymentStatus === "pago" ? (
+1399-                        <p>Será gerado um recebimento direto no valor de <strong>R$ {compChargedAmount.toFixed(2)}</strong> via <strong>{compPaymentMethod}</strong> na data de hoje.</p>
+1400-                      ) : (
+1401-                        <p>Será criado um orçamento aprovado e uma conta a receber no valor de <strong>R$ {compChargedAmount.toFixed(2)}</strong> com vencimento para <strong>{compDueDate.split("-").reverse().join("/")}</strong>.</p>
+1402-                      )}
+1403-                    </div>
+1404-                  </div>
+1405-                </div>
+1406-              );
+1407-            })()}
+1408-          </div>
+1409-
+1410-          <DialogFooter className="border-t pt-3 flex justify-between gap-3 mt-4">
+1411-            <button
+1412-              type="button"
+1413-              onClick={() => { setIsCompletionModalOpen(false); setCompletionAppt(null); }}
+1414-              disabled={saving}
+1415-              className="agenda-btn-secondary h-10 px-5 rounded-lg text-sm font-bold border-2 transition-colors disabled:opacity-50"
+1416-            >
+1417-              Cancelar
+1418-            </button>
+1419-            <div className="flex gap-2">
+1420-              <button
+1421-                type="button"
+1422-                onClick={() => setCompletionStep(prev => prev - 1)}
+1423-                disabled={saving || completionStep === 1}
+1424-                className="agenda-btn-secondary h-10 px-5 rounded-lg text-sm font-bold border-2 transition-colors disabled:opacity-50"
+1425-              >
+1426-                Voltar
+1427-              </button>
+1428-              {completionStep < 5 ? (
+1429-                <button
+1430-                  type="button"
+1431-                  onClick={() => setCompletionStep(prev => prev + 1)}
+1432-                  disabled={
+1433-                    (completionStep === 1 && (!compDescription || !compSignature))
+1434-                  }
+1435-                  className="agenda-btn-primary h-10 px-6 rounded-lg text-sm font-bold transition-colors shadow-sm disabled:opacity-50"
+1436-                >
+1437-                  Avançar
+1438-                </button>
+1439-              ) : (
+1440-                <button
+1441-                  type="button"
+1442-                  onClick={handleFinalizeCompletion}
+1443-                  disabled={saving}
+1444-                  className="agenda-btn-primary bg-emerald-600 hover:bg-emerald-700 h-10 px-6 rounded-lg text-sm font-bold text-white transition-colors shadow-sm disabled:opacity-50"
+1445-                >
+1446-                  {saving ? "Finalizando..." : "Finalizar e Faturar"}
+1447-                </button>
+1448-              )}
+1449-            </div>
+1450-          </DialogFooter>
+1451-        </DialogContent>
+1452-      </Dialog>
+1453-
+1454-    </AppLayout>
+1455-  );
+1456-}

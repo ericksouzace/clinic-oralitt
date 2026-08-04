@@ -1,0 +1,1049 @@
+=== DB ===
+967-    full_name: p.fullName || "Sem nome",
+968-    reference_note: strOrNull(p.referenceNote),
+969-    cpf: strOrNull(p.cpf),
+970-    rg: strOrNull(p.rg),
+971-    issuing_agency: strOrNull(p.issuingAgency),
+972-    birth_date: strOrNull(p.birthDate),
+973-    gender: strOrNull(p.gender),
+974-    marital_status: strOrNull(p.maritalStatus),
+975-    profession: strOrNull(p.profession),
+976-    phone: strOrNull(p.phone),
+977-    whatsapp: strOrNull(p.whatsapp),
+978-    address: strOrNull(p.address),
+979-    administrative_notes: strOrNull(p.administrativeNotes),
+980-    status: p.status || "em tratamento",
+981-    invoice_preference: p.invoicePreference ?? null,
+982-  };
+983-}
+984-
+985-export interface CustomStatusType {
+986-  id: string;
+987-  name: string;
+988-  color: string;
+989-  description?: string;
+990-}
+991-
+992:export function usePatients(): [
+993-  Patient[],
+994-  (v: Patient[] | ((p: Patient[]) => Patient[])) => Promise<void>,
+995-  boolean,
+996-  string | null,
+997-] {
+998-  const [items, setItems] = useState<Patient[]>([]);
+999-  const [loading, setLoading] = useState(true);
+1000-  const [errorState, setErrorState] = useState<string | null>(null);
+1001-
+1002-  const load = useCallback(async (silent = false) => {
+1003-    try {
+1004-      if (!silent) setLoading(true);
+1005-      setErrorState(null);
+1006-      const user = await getCurrentUser();
+1007-      if (!user) {
+1008-        setErrorState("Usuário não autenticado. Faça login.");
+1009-        return;
+1010-      }
+1011-      const { data, error } = await supabase
+1012-        .from("patients")
+1013-        .select("*")
+1014-        .eq("user_id", user.id)
+1015-        .order("created_at", { ascending: false });
+1016-
+1017-      if (error) {
+1018-        logSupabaseError("patients load", error);
+1019-        setErrorState(error.message || "Erro desconhecido ao carregar pacientes.");
+1020-        throw error;
+1021-      }
+1022-
+1023-      if (data) setItems((data as DbPatient[]).map(dbToPatient));
+1024-    } catch (e: any) {
+1025-    } finally {
+1026-      if (!silent) setLoading(false);
+1027-    }
+1028-  }, []);
+1029-
+1030-  useEffect(() => {
+1031-    void load(false);
+1032-    if (typeof window === "undefined") return;
+1033-    const handlePatientsChanged = () => {
+1034-      void load(true);
+1035-    };
+1036-    window.addEventListener("oralit:patients-changed", handlePatientsChanged);
+1037-    return () => window.removeEventListener("oralit:patients-changed", handlePatientsChanged);
+1038-  }, [load]);
+1039-
+1040-  const setter = useCallback(
+1041-    async (v: Patient[] | ((p: Patient[]) => Patient[])) => {
+1042-      try {
+1043-        const user = await getCurrentUserOrThrow();
+1044-        const next = typeof v === "function" ? v(items) : v;
+1045-
+1046-        const currentIds = new Set(items.map((i) => i.id));
+1047-        const nextIds = new Set(next.map((i) => i.id));
+1048-
+1049-        for (const id of currentIds) {
+1050-          if (!nextIds.has(id)) {
+1051-            const { error } = await supabase
+1052-              .from("patients")
+1053-              .delete()
+1054-              .eq("id", id)
+1055-              .eq("user_id", user.id);
+1056-            if (error) {
+1057-              logSupabaseError("patients delete", error);
+1058-              throw error;
+1059-            }
+1060-          }
+1061-        }
+1062-
+1063-        for (const item of next) {
+1064-          if (!currentIds.has(item.id)) {
+1065-            const { data, error } = await supabase
+1066-              .from("patients")
+1067-              .insert(patientToDb(item, user.id))
+1068-              .select()
+1069-              .single();
+1070-            if (error) {
+1071-              logSupabaseError("patients insert", error);
+1072-              throw error;
+--
+1855-  } else {
+1856-    const { error } = await supabase.from("treatment_plan_items").insert(dbObj);
+1857-    if (error) {
+1858-      logSupabaseError("insert treatment_plan_items", error);
+1859-      throw error;
+1860-    }
+1861-  }
+1862-}
+1863-
+1864-export async function deleteTreatmentPlanItem(id: string) {
+1865-  const { data: userData } = await supabase.auth.getUser();
+1866-  if (!userData.user) return;
+1867-  const { error } = await supabase
+1868-    .from("treatment_plan_items")
+1869-    .delete()
+1870-    .eq("id", id)
+1871-    .eq("user_id", userData.user.id);
+1872-  if (error) {
+1873-    logSupabaseError("delete treatment_plan_items", error);
+1874-    throw error;
+1875-  }
+1876-}
+1877-
+1878-// --- Clinical Records / Evolução Clínica ---
+1879-
+1880:export function useClinicalRecords(
+1881-  patientId?: string,
+1882-): [ClinicalRecord[], string | null, boolean, boolean, () => void] {
+1883-  const [records, setRecords] = useState<ClinicalRecord[]>([]);
+1884-  const [loading, setLoading] = useState(true);
+1885-  const [error, setError] = useState<string | null>(null);
+1886-  const [tablesMissing, setTablesMissing] = useState(false);
+1887-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+1888-
+1889-  const refetch = () => setRefreshTrigger((prev) => prev + 1);
+1890-
+1891-  useEffect(() => {
+1892-    let active = true;
+1893-    async function fetchRecords() {
+1894-      if (!patientId) {
+1895-        if (active) {
+1896-          setRecords([]);
+1897-          setLoading(false);
+1898-        }
+1899-        return;
+1900-      }
+1901-      try {
+1902-        const { data: userData } = await supabase.auth.getUser();
+1903-        if (!userData.user) {
+1904-          if (active) {
+1905-            setRecords([]);
+1906-            setLoading(false);
+1907-            setError("Não autenticado");
+1908-          }
+1909-          return;
+1910-        }
+1911-
+1912-        const { data: recData, error: recError } = await supabase
+1913:          .from("clinical_records")
+1914-          .select("*, procedures(name)")
+1915-          .eq("user_id", userData.user.id)
+1916-          .eq("patient_id", patientId)
+1917-          .order("record_date", { ascending: false });
+1918-
+1919-        if (recError) {
+1920-          if (recError.code === "42P01") {
+1921-            if (active) {
+1922-              setTablesMissing(true);
+1923-              setLoading(false);
+1924-            }
+1925-            return;
+1926-          }
+1927-          throw recError;
+1928-        }
+1929-
+1930-        const recordIds = (recData || []).map((r: any) => r.id);
+1931-
+1932-        let suppliesData: any[] = [];
+1933-        if (recordIds.length > 0) {
+1934-          const { data: sData, error: sError } = await supabase
+1935-            .from("clinical_record_supplies")
+1936-            .select("*, supplies(name)")
+1937-            .eq("user_id", userData.user.id)
+1938-            .in("clinical_record_id", recordIds);
+1939-
+1940-          if (sError) throw sError;
+1941-          suppliesData = sData || [];
+1942-        }
+1943-
+1944-        if (active) {
+1945-          const formattedRecords: ClinicalRecord[] = (recData || []).map((r: any) => {
+1946-            const recSupplies = suppliesData
+1947-              .filter((s) => s.clinical_record_id === r.id)
+1948-              .map(
+1949-                (s) =>
+1950-                  ({
+1951-                    id: s.id,
+1952-                    userId: s.user_id,
+1953-                    clinicalRecordId: s.clinical_record_id,
+1954-                    patientId: s.patient_id,
+1955-                    supplyId: s.supply_id,
+1956-                    quantityUsed: s.quantity_used,
+1957-                    unitCost: s.unit_cost,
+1958-                    totalCost: s.total_cost,
+1959-                    createdAt: s.created_at,
+1960-                    supplyName: s.supplies?.name,
+1961-                  }) as ClinicalRecordSupply,
+1962-              );
+1963-
+1964-            return {
+1965-              id: r.id,
+1966-              userId: r.user_id,
+1967-              patientId: r.patient_id,
+1968-              procedureId: r.procedure_id,
+1969-              recordDate: r.record_date,
+1970-              teeth: r.teeth || [],
+1971-              description: r.description,
+1972-              notes: r.notes,
+1973-              chargedAmount: r.charged_amount,
+1974-              realCost: r.real_cost,
+1975-              estimatedProfit: r.estimated_profit,
+1976-              signature: r.signature,
+1977-              createdAt: r.created_at,
+1978-              updatedAt: r.updated_at,
+1979-              procedureName: r.procedures?.name,
+1980-              supplies: recSupplies,
+1981-            } as ClinicalRecord;
+1982-          });
+1983-          setRecords(formattedRecords);
+1984-          setLoading(false);
+1985-        }
+1986-      } catch (err: any) {
+1987:        logSupabaseError("useClinicalRecords", err);
+1988-        if (active) {
+1989-          setError(err.message || "Erro ao carregar fichas clínicas");
+1990-          setLoading(false);
+1991-        }
+1992-      }
+1993-    }
+1994-    fetchRecords();
+1995-    return () => {
+1996-      active = false;
+1997-    };
+1998-  }, [patientId, refreshTrigger]);
+1999-
+2000-  return [records, error, loading, tablesMissing, refetch];
+2001-}
+2002-
+2003-export async function saveClinicalRecord(record: ClinicalRecord, items: ClinicalRecordSupply[]) {
+2004-  const { data: userData } = await supabase.auth.getUser();
+2005-  if (!userData.user) throw new Error("Não autenticado");
+2006-
+2007-  const dbObj = {
+2008-    user_id: userData.user.id,
+2009-    patient_id: record.patientId,
+2010-    procedure_id: record.procedureId || null,
+2011-    record_date: record.recordDate,
+2012-    teeth: record.teeth || [],
+2013-    description: record.description,
+2014-    notes: record.notes,
+2015-    charged_amount: record.chargedAmount || 0,
+2016-    real_cost: record.realCost || 0,
+2017-    estimated_profit: record.estimatedProfit || 0,
+2018-    signature: record.signature,
+2019-  };
+2020-
+2021-  let recordId = record.id;
+2022-  let isNew = false;
+2023-  if (recordId && !recordId.startsWith("temp-")) {
+2024-    const { error } = await supabase
+2025:      .from("clinical_records")
+2026-      .update(dbObj)
+2027-      .eq("id", recordId)
+2028-      .eq("user_id", userData.user.id);
+2029-    if (error) {
+2030:      logSupabaseError("update clinical_records", error);
+2031-      throw error;
+2032-    }
+2033-  } else {
+2034-    isNew = true;
+2035:    const { data, error } = await supabase.from("clinical_records").insert(dbObj).select().single();
+2036-    if (error) {
+2037:      logSupabaseError("insert clinical_records", error);
+2038-      throw error;
+2039-    }
+2040-    recordId = (data as any).id;
+2041-  }
+2042-
+2043-  // Handle supplies sync and stock movements
+2044-  // Load existing items in DB first for this clinical record to compare
+2045-  const { data: currentItems, error: itemsError } = await supabase
+2046-    .from("clinical_record_supplies")
+2047-    .select("*")
+2048-    .eq("clinical_record_id", recordId)
+2049-    .eq("user_id", userData.user.id);
+2050-
+2051-  if (itemsError) throw itemsError;
+2052-
+2053-  const oldItems = currentItems || [];
+2054-
+2055-  // Helper to adjust stock
+2056-  const adjustStockAndCreateMovement = async (
+2057-    supplyId: string,
+2058-    quantityChange: number,
+2059-    movementType: "entrada" | "saida",
+2060-    reason: string,
+2061-  ) => {
+2062-    if (quantityChange <= 0) return;
+2063-
+2064-    // Get current stock
+2065-    const { data: sData } = await supabase
+2066-      .from("supplies")
+2067-      .select("stock_quantity")
+2068-      .eq("id", supplyId)
+2069-      .single();
+2070-    const currentStock = sData ? Number(sData.stock_quantity || 0) : 0;
+2071-    const newStock =
+2072-      movementType === "entrada" ? currentStock + quantityChange : currentStock - quantityChange;
+2073-
+2074-    // Update stock
+2075-    await supabase.from("supplies").update({ stock_quantity: newStock }).eq("id", supplyId);
+2076-
+2077-    // Create movement
+2078-    await supabase.from("stock_movements").insert({
+2079-      user_id: userData.user.id,
+2080-      supply_id: supplyId,
+2081-      patient_id: record.patientId,
+2082-      movement_type: movementType,
+2083-      quantity: quantityChange,
+2084-      reason: reason,
+2085-    });
+2086-  };
+2087-
+2088-  if (isNew) {
+2089-    // For a new clinical record, everything is a new usage (saida)
+2090-    for (const item of items) {
+2091-      if (item.supplyId) {
+2092-        const qty = item.quantityUsed || 1;
+2093-        await adjustStockAndCreateMovement(
+2094-          item.supplyId,
+2095-          qty,
+2096-          "saida",
+2097-          `Uso em ficha clínica: ${recordId}`,
+2098-        );
+2099-      }
+2100-    }
+2101-  } else {
+2102-    // For an existing record: compare old and new
+2103-    // 1. Identify deleted supplies (in oldItems but not in items)
+2104-    for (const old of oldItems) {
+2105-      const matched = items.find((n) => n.supplyId === old.supply_id);
+2106-      if (!matched) {
+2107-        // Deleted
+2108-        const qty = old.quantity_used || 1;
+2109-        await adjustStockAndCreateMovement(
+2110-          old.supply_id,
+2111-          qty,
+2112-          "entrada",
+2113-          `Estorno por remoção em evolução clínica: ${recordId}`,
+2114-        );
+2115-      }
+2116-    }
+2117-
+--
+2230-          .from("supplies")
+2231-          .update({ stock_quantity: newStock })
+2232-          .eq("id", item.supply_id);
+2233-
+2234-        // Create movement
+2235-        await supabase.from("stock_movements").insert({
+2236-          user_id: userData.user.id,
+2237-          supply_id: item.supply_id,
+2238-          patient_id: item.patient_id,
+2239-          movement_type: "entrada",
+2240-          quantity: qty,
+2241-          reason: `Estorno por exclusão de evolução clínica: ${id}`,
+2242-        });
+2243-      }
+2244-    }
+2245-  }
+2246-
+2247-  // Delete clinical record supplies explicitly to avoid constraint problems
+2248-  await supabase
+2249-    .from("clinical_record_supplies")
+2250-    .delete()
+2251-    .eq("clinical_record_id", id)
+2252-    .eq("user_id", userData.user.id);
+2253-
+2254-  const { error } = await supabase
+2255:    .from("clinical_records")
+2256-    .delete()
+2257-    .eq("id", id)
+2258-    .eq("user_id", userData.user.id);
+2259-  if (error) {
+2260:    logSupabaseError("delete clinical_records", error);
+2261-    throw error;
+2262-  }
+2263-}
+2264-
+2265-// --- Financeiro: Orçamentos ---
+2266-
+2267-export function useBudgets(patientId?: string): [Budget[], string | null, boolean, boolean] {
+2268-  const [budgets, setBudgets] = useState<Budget[]>([]);
+2269-  const [loading, setLoading] = useState(true);
+2270-  const [error, setError] = useState<string | null>(null);
+2271-  const [tablesMissing, setTablesMissing] = useState(false);
+2272-
+2273-  useEffect(() => {
+2274-    let active = true;
+2275-    async function fetchBudgets() {
+2276-      if (!patientId) {
+2277-        if (active) {
+2278-          setBudgets([]);
+2279-          setLoading(false);
+2280-        }
+2281-        return;
+2282-      }
+2283-      try {
+2284-        const { data: userData } = await supabase.auth.getUser();
+2285-        if (!userData.user) {
+2286-          if (active) {
+2287-            setBudgets([]);
+2288-            setLoading(false);
+2289-            setError("Não autenticado");
+2290-          }
+2291-          return;
+2292-        }
+2293-
+2294-        const { data: bData, error: bError } = await supabase
+2295-          .from("budgets")
+2296-          .select("*")
+2297-          .eq("user_id", userData.user.id)
+2298-          .eq("patient_id", patientId)
+2299-          .order("created_at", { ascending: false });
+2300-
+2301-        if (bError) {
+2302-          if (bError.code === "42P01") {
+2303-            if (active) {
+2304-              setTablesMissing(true);
+2305-              setLoading(false);
+2306-            }
+2307-            return;
+2308-          }
+2309-          throw bError;
+2310-        }
+2311-
+2312-        const budgetIds = (bData || []).map((b: any) => b.id);
+2313-
+2314-        let itemsData: any[] = [];
+2315-        if (budgetIds.length > 0) {
+2316-          const { data: iData, error: iError } = await supabase
+2317-            .from("budget_items")
+2318-            .select("*, procedures(name)")
+2319-            .eq("user_id", userData.user.id)
+2320-            .in("budget_id", budgetIds)
+2321-            .order("created_at", { ascending: true });
+2322-
+2323-          if (iError) throw iError;
+2324-          itemsData = iData || [];
+2325-        }
+2326-
+2327-        if (active) {
+2328-          const formattedBudgets: Budget[] = (bData || []).map((b: any) => {
+2329-            const bItems = itemsData
+2330-              .filter((i) => i.budget_id === b.id)
+2331-              .map(
+2332-                (i) =>
+2333-                  ({
+2334-                    id: i.id,
+2335-                    userId: i.user_id,
+2336-                    budgetId: i.budget_id,
+2337-                    procedureId: i.procedure_id,
+2338-                    toothNumber: i.tooth_number,
+2339-                    toothRegion: i.tooth_region,
+2340-                    description: i.description,
+--
+2592-}
+2593-
+2594-export async function updateInstallmentStatus(id: string, updates: Partial<PaymentInstallment>) {
+2595-  const { data: userData } = await supabase.auth.getUser();
+2596-  if (!userData.user) return;
+2597-  const dbObj: any = { updated_at: new Date().toISOString() };
+2598-  if (updates.status !== undefined) dbObj.status = updates.status;
+2599-  if (updates.paidAmount !== undefined) dbObj.paid_amount = updates.paidAmount;
+2600-  if (updates.remainingAmount !== undefined) dbObj.remaining_amount = updates.remainingAmount;
+2601-  if (updates.dueDate !== undefined) dbObj.due_date = updates.dueDate;
+2602-  if (updates.amount !== undefined) dbObj.amount = updates.amount;
+2603-
+2604-  const { error } = await supabase
+2605-    .from("payment_installments")
+2606-    .update(dbObj)
+2607-    .eq("id", id)
+2608-    .eq("user_id", userData.user.id);
+2609-  if (error) {
+2610-    logSupabaseError("update installment", error);
+2611-    throw error;
+2612-  }
+2613-}
+2614-
+2615-// --- Financeiro: Pagamentos ---
+2616-
+2617:export function usePayments(patientId?: string): [Payment[], boolean, () => void] {
+2618:  const [payments, setPayments] = useState<Payment[]>([]);
+2619-  const [loading, setLoading] = useState(true);
+2620-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+2621-  const refetch = useCallback(() => setRefreshTrigger((value) => value + 1), []);
+2622-
+2623-  useEffect(() => {
+2624-    let active = true;
+2625-    async function fetch() {
+2626-      if (!patientId) {
+2627-        if (active) {
+2628-          setPayments([]);
+2629-          setLoading(false);
+2630-        }
+2631-        return;
+2632-      }
+2633-      try {
+2634-        const { data: userData } = await supabase.auth.getUser();
+2635-        if (!userData.user) return;
+2636-
+2637-        const { data, error } = await supabase
+2638:          .from("payments")
+2639-          .select("*, payment_splits(*)")
+2640-          .eq("user_id", userData.user.id)
+2641-          .eq("patient_id", patientId)
+2642-          .order("payment_date", { ascending: false });
+2643-
+2644-        if (error) {
+2645-          if (error.code !== "42P01") throw error;
+2646-          if (active) setLoading(false);
+2647-          return;
+2648-        }
+2649-
+2650-        if (active && data) {
+2651-          setPayments(
+2652-            data.map((d: any) => ({
+2653-              id: d.id,
+2654-              userId: d.user_id,
+2655-              patientId: d.patient_id,
+2656-              budgetId: d.budget_id,
+2657-              installmentId: d.installment_id,
+2658-              amount: d.amount,
+2659-              paymentMethod: d.payment_method,
+2660-              paymentDate: d.payment_date,
+2661-              cardFee: d.card_fee,
+2662-              netAmount: d.net_amount,
+2663-              notes: d.notes,
+2664-              attachmentUrl: d.attachment_url,
+2665-              createdAt: d.created_at,
+2666-              splits: (d.payment_splits || []).map((s: any) => ({
+2667-                id: s.id,
+2668-                userId: s.user_id,
+2669-                paymentId: s.payment_id,
+2670-                paymentMethod: s.payment_method,
+2671-                amount: s.amount,
+2672-                createdAt: s.created_at,
+2673-              })),
+2674-            })),
+2675-          );
+2676-          setLoading(false);
+2677-        }
+2678-      } catch (err) {
+2679:        logSupabaseError("usePayments", err);
+2680-        if (active) setLoading(false);
+2681-      }
+2682-    }
+2683-    fetch();
+2684-    return () => {
+2685-      active = false;
+2686-    };
+2687-  }, [patientId, refreshTrigger]);
+2688-
+2689:  return [payments, loading, refetch];
+2690-}
+2691-
+2692:export async function savePayment(
+2693-  payment: Partial<Payment>,
+2694-  splits: Partial<PaymentSplit>[],
+2695-  installmentToUpdate?: Partial<PaymentInstallment>,
+2696-) {
+2697-  const { data: userData } = await supabase.auth.getUser();
+2698-  if (!userData.user) throw new Error("Não autenticado");
+2699-
+2700-  const dbObj = {
+2701-    user_id: userData.user.id,
+2702-    patient_id: payment.patientId,
+2703-    budget_id: payment.budgetId || null,
+2704-    installment_id: payment.installmentId || null,
+2705-    amount: payment.amount || 0,
+2706-    payment_method: payment.paymentMethod || null,
+2707-    payment_date: payment.paymentDate || new Date().toISOString().split("T")[0],
+2708-    card_fee: payment.cardFee || 0,
+2709-    net_amount: payment.netAmount || 0,
+2710-    notes: payment.notes,
+2711-  };
+2712-
+2713-  let paymentId = payment.id;
+2714-  if (paymentId && !paymentId.startsWith("temp-")) {
+2715-    const { error } = await supabase
+2716:      .from("payments")
+2717-      .update(dbObj)
+2718-      .eq("id", paymentId)
+2719-      .eq("user_id", userData.user.id);
+2720-    if (error) throw error;
+2721-  } else {
+2722:    const { data, error } = await supabase.from("payments").insert(dbObj).select().single();
+2723-    if (error) throw error;
+2724-    paymentId = (data as any).id;
+2725-  }
+2726-
+2727-  // Payment splits
+2728-  for (const s of splits) {
+2729-    if (s.id && !s.id.startsWith("temp-")) continue; // Only handle new splits for now
+2730-    await supabase.from("payment_splits").insert({
+2731-      user_id: userData.user.id,
+2732-      payment_id: paymentId,
+2733-      payment_method: s.paymentMethod,
+2734-      amount: s.amount,
+2735-    });
+2736-  }
+2737-
+2738-  // Update installment status if provided
+2739-  if (installmentToUpdate) {
+2740-    const { error } = await supabase
+2741-      .from("payment_installments")
+2742-      .update({
+2743-        paid_amount: installmentToUpdate.paidAmount,
+2744-        remaining_amount: installmentToUpdate.remainingAmount,
+2745-        status: installmentToUpdate.status,
+2746-        updated_at: new Date().toISOString(),
+2747-      })
+2748-      .eq("id", installmentToUpdate.id)
+2749-      .eq("user_id", userData.user.id);
+2750-    if (error) throw error;
+2751-  }
+2752-}
+2753-
+2754-export async function deletePayment(payment: Payment) {
+2755-  const { data: userData } = await supabase.auth.getUser();
+2756-  if (!userData.user) return;
+2757-
+2758-  // First delete the payment (which cascades splits or we delete splits first)
+2759-  const { error: splitError } = await supabase
+2760-    .from("payment_splits")
+2761-    .delete()
+2762-    .eq("payment_id", payment.id)
+2763-    .eq("user_id", userData.user.id);
+2764-  if (splitError) throw splitError;
+2765-
+2766-  const { error } = await supabase
+2767:    .from("payments")
+2768-    .delete()
+2769-    .eq("id", payment.id)
+2770-    .eq("user_id", userData.user.id);
+2771-  if (error) {
+2772-    logSupabaseError("delete payment", error);
+2773-    throw error;
+2774-  }
+2775-
+2776-  // Recalculate if it has an installment
+2777-  if (payment.installmentId) {
+2778-    const { data: instData } = await supabase
+2779-      .from("payment_installments")
+2780-      .select("*")
+2781-      .eq("id", payment.installmentId)
+2782-      .single();
+2783-    if (instData) {
+2784-      const newPaid = Math.max(0, Number(instData.paid_amount) - payment.amount);
+2785-      const newRem = instData.amount - newPaid;
+2786-      const newStatus = newRem <= 0.01 ? "pago" : newPaid > 0 ? "parcialmente pago" : "pendente";
+2787-      await supabase
+2788-        .from("payment_installments")
+2789-        .update({
+2790-          paid_amount: newPaid,
+2791-          remaining_amount: newRem,
+2792-          status: newStatus,
+2793-          updated_at: new Date().toISOString(),
+2794-        })
+2795-        .eq("id", payment.installmentId)
+2796-        .eq("user_id", userData.user.id);
+2797-    }
+2798-  }
+2799-}
+2800-
+2801-// ---------------------------------------------------------------------------
+2802-// Appointments / Agenda
+2803-// ---------------------------------------------------------------------------
+2804-
+2805:export function useAppointments(
+2806-  patientId?: string,
+2807-): [Appointment[], boolean, boolean, () => void] {
+2808-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+2809-  const [loading, setLoading] = useState(true);
+2810-  const [tablesMissing, setTablesMissing] = useState(false);
+2811-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+2812-
+2813-  const refetch = useCallback(
+2814-    () => setRefreshTrigger((current) => current + 1),
+2815-    [],
+2816-  );
+2817-
+2818-  useEffect(() => {
+2819-    let active = true;
+2820-    async function fetchAppointments() {
+2821-      try {
+2822-        const { data: userData } = await supabase.auth.getUser();
+2823-        if (!userData.user) {
+2824-          if (active) setLoading(false);
+2825-          return;
+2826-        }
+2827-
+2828-        let query = supabase
+2829-          .from("appointments")
+2830-          .select("*, patients(full_name, phone), procedures(name), treatment_plans(title)")
+2831-          .eq("user_id", userData.user.id);
+2832-
+2833-        if (patientId) {
+2834-          query = query.eq("patient_id", patientId);
+2835-        }
+2836-
+2837-        query = query
+2838-          .order("appointment_date", { ascending: true })
+2839-          .order("start_time", { ascending: true });
+2840-
+2841-        const { data, error } = await query;
+2842-
+2843-        if (error) {
+2844-          if (error.code === "42P01" || error.code === "42703") {
+2845-            if (active) {
+2846-              setTablesMissing(true);
+2847-              setLoading(false);
+2848-            }
+2849-            return;
+2850-          }
+2851-          throw error;
+2852-        }
+2853-
+2854-        if (active && data) {
+2855-          setTablesMissing(false);
+2856-          setAppointments(
+2857-            data.map((d: any) => ({
+2858-              id: d.id,
+2859-              userId: d.user_id,
+2860-              patientId: d.patient_id,
+2861-              procedureId: d.procedure_id,
+2862-              treatmentPlanId: d.treatment_plan_id,
+2863-              title: d.title || `Consulta - ${d.patients?.full_name || ""}`,
+2864-              appointmentDate: d.appointment_date,
+2865-              startTime: d.start_time,
+2866-              endTime: d.end_time,
+2867-              status: d.status,
+2868-              type: d.type || "consulta",
+2869-              notes: d.notes,
+2870-              whatsappReminder: d.whatsapp_reminder ?? false,
+2871-              createdAt: d.created_at,
+2872-              updatedAt: d.updated_at,
+2873-              patientName: d.patients?.full_name || "Paciente Não Identificado",
+2874-              patientPhone: d.patients?.phone || "",
+2875-              procedureName: d.procedures?.name || "",
+2876-              treatmentPlanTitle: d.treatment_plans?.title || "",
+2877-            })),
+2878-          );
+2879-          setLoading(false);
+2880-        }
+2881-      } catch (err: any) {
+2882:        logSupabaseError("useAppointments", err);
+2883-        if (active) {
+2884-          if (err.message?.includes("column") || err.message?.includes("relation")) {
+2885-            setTablesMissing(true);
+2886-          }
+2887-          setLoading(false);
+2888-        }
+2889-      }
+2890-    }
+2891-    fetchAppointments();
+2892-    return () => {
+2893-      active = false;
+2894-    };
+2895-  }, [patientId, refreshTrigger]);
+2896-
+2897-  return [appointments, loading, tablesMissing, refetch];
+2898-}
+2899-
+2900:export async function saveAppointment(app: Appointment) {
+2901-  const { data: userData } = await supabase.auth.getUser();
+2902-  if (!userData.user) throw new Error("Não autenticado");
+2903-
+2904-  const dbObj = {
+2905-    user_id: userData.user.id,
+2906-    patient_id: app.patientId,
+2907-    procedure_id: app.procedureId || null,
+2908-    treatment_plan_id: app.treatmentPlanId || null,
+2909-    title: app.title,
+2910-    appointment_date: app.appointmentDate,
+2911-    start_time: app.startTime,
+2912-    end_time: app.endTime,
+2913-    status: app.status || "agendado",
+2914-    type: app.type || "consulta",
+2915-    notes: app.notes || null,
+2916-    whatsapp_reminder: app.whatsappReminder ?? false,
+2917-  };
+2918-
+2919-  if (app.id && !app.id.startsWith("temp-")) {
+2920-    const { error } = await supabase
+2921-      .from("appointments")
+2922-      .update({ ...dbObj, updated_at: new Date().toISOString() })
+2923-      .eq("id", app.id)
+2924-      .eq("user_id", userData.user.id);
+2925-    if (error) {
+2926-      logSupabaseError("update appointments", error);
+2927-      throw error;
+2928-    }
+2929-  } else {
+2930-    const { error } = await supabase.from("appointments").insert(dbObj);
+2931-    if (error) {
+2932-      logSupabaseError("insert appointments", error);
+2933-      throw error;
+2934-    }
+2935-  }
+2936-}
+2937-
+2938-export async function deleteAppointment(id: string) {
+2939-  const { data: userData } = await supabase.auth.getUser();
+2940-  if (!userData.user) return;
+2941-
+2942-  const { error } = await supabase
+2943-    .from("appointments")
+2944-    .eq("id", id)
+2945-    .eq("user_id", userData.user.id);
+2946-  if (error) {
+2947-    logSupabaseError("delete appointments", error);
+2948-    throw error;
+2949-  }
+2950-}
+2951-
+2952-// ---------------------------------------------------------------------------
+2953-// Patient Files (Storage & Metadata)
+2954-// ---------------------------------------------------------------------------
+2955-
+2956-export function usePatientFiles(
+2957-  patientId: string,
+2958-  fileType: PatientFileType,
+2959-): [PatientFile[], boolean, string | null, () => void] {
+2960-  const [files, setFiles] = useState<PatientFile[]>([]);
+2961-  const [loading, setLoading] = useState(true);
+2962-  const [error, setError] = useState<string | null>(null);
+2963-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+2964-
+2965-  const refetch = () => setRefreshTrigger((prev) => prev + 1);
+2966-
+2967-  useEffect(() => {
+2968-    let active = true;
+2969-    async function fetchFiles() {
+2970-      if (!patientId) {
+2971-        if (active) {
+2972-          setFiles([]);
+2973-          setLoading(false);
+2974-        }
+2975-        return;
+2976-      }
+2977-      try {
+2978-        const { data: userData } = await supabase.auth.getUser();
+2979-        if (!userData.user) {
+2980-          if (active) {
+--
+3507-    }
+3508-  }
+3509-
+3510-  if (addedCount === 0) {
+3511-    throw new Error("Nenhum item foi selecionado para adicionar ou atualizar no Estoque.");
+3512-  }
+3513-
+3514-  await applyFileDestination(fileId, {
+3515-    ocr_destination_suggestion: "estoque",
+3516-    category,
+3517-    notes: data.notes,
+3518-  });
+3519-}
+3520-
+3521-export async function applyFileToFinanceiro(
+3522-  fileId: string,
+3523-  data: any,
+3524-  patientId: string,
+3525-  category: string,
+3526-  notes: string,
+3527-) {
+3528-  const { data: userData } = await supabase.auth.getUser();
+3529-  if (!userData.user) throw new Error("Não autenticado");
+3530-
+3531-  const { data: inserted, error } = await supabase
+3532:    .from("payments")
+3533-    .insert({
+3534-      user_id: userData.user.id,
+3535-      patient_id: patientId || null,
+3536-      amount: data.type === "despesa" ? -Math.abs(data.amount || 0) : Math.abs(data.amount || 0),
+3537-      net_amount:
+3538-        data.type === "despesa"
+3539-          ? -Math.abs(data.netAmount || data.amount || 0)
+3540-          : Math.abs(data.netAmount || data.amount || 0),
+3541-      payment_method: data.paymentMethod || "Outro",
+3542-      payment_date: data.date || new Date().toISOString().split("T")[0],
+3543-      card_fee: data.fee || 0,
+3544-      notes: `${notes}\nGerado via Central de PDFs e Arquivos. Arquivo: ${fileId}`.trim(),
+3545-    })
+3546-    .select()
+3547-    .single();
+3548-
+3549-  if (error) throw new Error(`Erro ao criar lançamento financeiro: ${error.message}`);
+3550-  if (!inserted) throw new Error("Não foi possível confirmar a aplicação no Financeiro.");
+3551-
+3552-  // Post-save validation
+3553-  const { data: confirmPay, error: confirmErr } = await supabase
+3554:    .from("payments")
+3555-    .select("id")
+3556-    .eq("id", inserted.id)
+3557-    .single();
+3558-  if (confirmErr || !confirmPay) {
+3559-    throw new Error("Não foi possível confirmar o envio para o Financeiro.");
+3560-  }
+3561-
+3562-  await applyFileDestination(fileId, {
+3563-    ocr_destination_suggestion: "financeiro",
+3564-    category,
+3565-    notes,
+3566-    patient_id: patientId,
+3567-  });
+3568-}
+3569-
+3570-export async function applyFileToClinicalRecord(
+3571-  fileId: string,
+3572-  data: any,
+3573-  patientId: string,
+3574-  category: string,
+3575-  notes: string,
+3576-) {
+3577-  const { data: userData } = await supabase.auth.getUser();
+3578-  if (!userData.user) throw new Error("Não autenticado");
+3579-  if (!patientId) throw new Error("Selecione um paciente obrigatório para a Ficha Clínica.");
+3580-
+3581-  const { data: inserted, error } = await supabase
+3582:    .from("clinical_records")
+3583-    .insert({
+3584-      user_id: userData.user.id,
+3585-      patient_id: patientId,
+3586-      record_date: data.date || new Date().toISOString().split("T")[0],
+3587-      description: `[Central de PDFs - ${category}] [${data.clinicalType.toUpperCase()}] ${data.title}\n${data.summary || ""}`,
+3588-      notes: `${notes}\nArquivo original: ${fileId}`.trim(),
+3589-      charged_amount: 0,
+3590-      real_cost: 0,
+3591-      estimated_profit: 0,
+3592-    })
+3593-    .select()
+3594-    .single();
+3595-
+3596-  if (error) throw new Error(`Erro ao criar registro clínico: ${error.message}`);
+3597-  if (!inserted) throw new Error("Não foi possível confirmar a criação do registro clínico.");
+3598-
+3599-  // Post-save validation
+3600-  const { data: confirmRecord, error: confirmErr } = await supabase
+3601:    .from("clinical_records")
+3602-    .select("id")
+3603-    .eq("id", inserted.id)
+3604-    .single();
+3605-  if (confirmErr || !confirmRecord) {
+3606-    throw new Error("Não foi possível confirmar o vínculo com a Ficha Clínica.");
+3607-  }
+3608-
+3609-  await applyFileDestination(fileId, {
+3610-    ocr_destination_suggestion: "ficha_paciente",
+3611-    category,
+3612-    notes,
+3613-    patient_id: patientId,
+3614-  });
+3615-}
+3616-
+3617-export async function applyFileToDocumento(
+3618-  fileId: string,
+3619-  patientId: string,
+3620-  category: string,
+3621-  notes: string,
+3622-) {
+3623-  if (!patientId) throw new Error("Selecione um paciente obrigatório para vincular o Documento.");
+3624-
+3625-  await applyFileDestination(fileId, {
+3626-    ocr_destination_suggestion: "documento_paciente",
+3627-    category,
+3628-    notes,
+3629-    patient_id: patientId,
+3630-    file_type: "documento",
+3631-  });
+3632-
+3633-  // Post-save validation
+3634-  const { data: confirmDoc, error: confirmErr } = await supabase
+3635-    .from("patient_files")
+3636-    .select("id, patient_id")
+3637-    .eq("id", fileId)
+3638-    .single();
+3639-  if (confirmErr || !confirmDoc || confirmDoc.patient_id !== patientId) {
+3640-    throw new Error("Não foi possível confirmar o envio para Documentos do Paciente.");
+3641-  }
+3642-}
+3643-
+3644-export async function applyFileToBudget(
+3645-  fileId: string,
+3646-  data: any,
+3647-  patientId: string,
+3648-  category: string,
+3649-  notes: string,
+3650-) {
+3651-  const { data: userData } = await supabase.auth.getUser();
+3652-  if (!userData.user) throw new Error("Não autenticado");
+3653-  if (!patientId) throw new Error("Selecione um paciente obrigatório para gerar o Orçamento.");
+3654-
+3655-  const { data: budget, error } = await supabase
+3656-    .from("budgets")
+3657-    .insert({
+3658-      user_id: userData.user.id,
+3659-      patient_id: patientId,
+3660-      title: data.title || `Orçamento via Central de PDFs`,
+3661-      total_amount: data.totalAmount || 0,
+3662-      discount: 0,
+3663-      final_amount: data.totalAmount || 0,
+3664-      status: data.status || "rascunho",
+3665-      notes: `${notes}\nArquivo original: ${fileId}`.trim(),
+3666-    })
+3667-    .select()
+3668-    .single();
+3669-
+3670-  if (error) throw new Error(`Erro ao criar orçamento: ${error.message}`);
+3671-  if (!budget) throw new Error("Não foi possível confirmar a criação do orçamento.");
+3672-
+3673-  if (data.procedures && data.procedures.length > 0) {
+3674-    const items = data.procedures.map((p: any) => ({
+3675-      user_id: userData.user.id,
+3676-      budget_id: budget.id,
+3677-      description: p.description || "Procedimento sem nome",
+3678-      quantity: 1,
+3679-      unit_price: p.price || 0,
+3680-      total_price: p.price || 0,
+3681-    }));

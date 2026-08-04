@@ -1,0 +1,733 @@
+=== ROTA DO PACIENTE ===
+11-  Image as ImageIcon,
+12-  Plus,
+13-  ClipboardList,
+14-  CheckCircle,
+15-  Trash2,
+16-  Clock,
+17-  MessageCircle,
+18-} from "lucide-react";
+19-import AppLayout from "@/components/AppLayout";
+20-import {
+21-  PageHeader,
+22-  Card,
+23-  Button,
+24-  Badge,
+25-  Input,
+26-  Label,
+27-  Select,
+28-  Textarea,
+29-} from "@/components/ui-bits";
+30-import {
+31-  Patient,
+32-  Anamnesis,
+33-  AnamnesisStatus,
+34-  ANAMNESIS_STATUS,
+35-  OdontogramEntry,
+36-  TOOTH_REGIONS,
+37-  TOOTH_STATUS,
+38-} from "@/lib/store";
+39-import {
+40-  usePatients,
+41:  useAnamneses,
+42-  useOdontogramEntries,
+43-  useAppointments,
+44-  useBudgets,
+45-  usePayments,
+46-  useClinicalRecords,
+47-} from "@/lib/db";
+48-import {
+49-  Dialog,
+50-  DialogContent,
+51-  DialogHeader,
+52-  DialogTitle,
+53-  DialogFooter,
+54-} from "@/components/ui/dialog";
+55-import { OdontogramTab } from "@/components/odontogram/OdontogramTab";
+56:import { TreatmentPlanTab } from "@/components/treatment-plan/TreatmentPlanTab";
+57:import { ClinicalRecordTab } from "@/components/clinical-record/ClinicalRecordTab";
+58-import { FinanceTab } from "@/components/finance/FinanceTab";
+59-import { PatientPersonalDataTab } from "@/components/patient/PatientPersonalDataTab";
+60-import { getWhatsAppLogs } from "@/lib/whatsapp";
+61-import { ClinicalPhotosTab } from "@/components/patient-files/ClinicalPhotosTab";
+62-import { DocumentsTab } from "@/components/patient-files/DocumentsTab";
+63-import { toast } from "sonner";
+64-
+65-export const Route = createFileRoute("/pacientes_/$patientId")({
+66-  head: () => ({ meta: [{ title: "Ficha do Paciente — Oralit" }] }),
+67-  component: PatientProfilePage,
+68-});
+69-
+70-function calcAge(birthDate: string | undefined): number | null {
+71-  if (!birthDate) return null;
+72-  const birth = new Date(birthDate);
+73-  const today = new Date();
+74-  let age = today.getFullYear() - birth.getFullYear();
+75-  const m = today.getMonth() - birth.getMonth();
+76-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+77-  return age;
+78-}
+79-
+80-const TAB_MAP = {
+81-  resumo: "Resumo",
+82:  "dados-pessoais": "Dados pessoais",
+83:  anamnese: "Anamnese",
+84-  odontograma: "Odontograma",
+85-  "plano-tratamento": "Plano de tratamento",
+86:  "ficha-clinica": "Ficha clínica",
+87:  financeiro: "Financeiro",
+88-  "fotos-clinicas": "Fotos clínicas",
+89:  documentos: "Documentos",
+90-} as const;
+91-
+92-type TabType = keyof typeof TAB_MAP;
+93-const TABS: TabType[] = (Object.keys(TAB_MAP) as TabType[]).filter(
+94-  (tab) => tab !== "resumo" && tab !== "fotos-clinicas",
+95-);
+96-
+97-function PatientProfilePage() {
+98-  const { patientId } = Route.useParams();
+99-  const router = useRouter();
+100-  const [patients, setPatients, loading, error] = usePatients();
+101:  const [anamneses, setAnamneses, loadingAnamnesis, errorAnamnesis] = useAnamneses(patientId);
+102-  const [odontEntries] = useOdontogramEntries(patientId);
+103-  const [appointments] = useAppointments(patientId);
+104-  const [budgets] = useBudgets(patientId);
+105-  const [payments] = usePayments(patientId);
+106-  const [clinicalRecords] = useClinicalRecords(patientId);
+107-
+108-  // ── Financial and Clinical Calculations for Resume ───────────────────────
+109-  const approvedBudgets = budgets ? budgets.filter((b) => b.status === "aprovado") : [];
+110-  const totalOrcado = approvedBudgets.reduce((sum, b) => sum + (b.finalAmount || 0), 0);
+111-  const totalPago = payments ? payments.reduce((sum, p) => sum + (p.amount || 0), 0) : 0;
+112-  const saldoDevedor = Math.max(0, totalOrcado - totalPago);
+113-
+114-  const latestEvolution = clinicalRecords && clinicalRecords.length > 0 ? clinicalRecords[0] : null;
+115-
+116-  const [patientLogs, setPatientLogs] = useState<any[]>([]);
+117-
+118-  useEffect(() => {
+119-    let active = true;
+120-    async function loadLogs() {
+121-      try {
+122-        const { logs: allLogs } = await getWhatsAppLogs();
+123-        if (active) {
+124-          const filtered = allLogs.filter((l) => l.patientId === patientId);
+125-          setPatientLogs(filtered);
+126-        }
+127-      } catch (e) {
+128-        console.error(e);
+129-      }
+130-    }
+131-    loadLogs();
+132-    return () => {
+133-      active = false;
+134-    };
+135-  }, [patientId]);
+136-
+137-  // Filter next and past appointments for resume tab
+138-  const nextAppt = appointments.find((a) => {
+139-    if (a.status === "cancelado" || a.status === "concluído") return false;
+140-    const todayStr = new Date().toISOString().split("T")[0];
+141-    return a.appointmentDate >= todayStr;
+142-  });
+143-
+144-  const pastAppts = appointments
+145-    .filter((a) => {
+146-      const todayStr = new Date().toISOString().split("T")[0];
+147-      return (
+148-        a.appointmentDate < todayStr ||
+149-        a.status === "concluído" ||
+150-        a.status === "cancelado" ||
+151-        a.status === "faltou"
+152-      );
+153-    })
+154-    .sort((a, b) => {
+155-      const dateCompare = b.appointmentDate.localeCompare(a.appointmentDate);
+156-      if (dateCompare !== 0) return dateCompare;
+157-      return b.startTime.localeCompare(a.startTime);
+158-    })
+159-    .slice(0, 3);
+160-
+161:  const [activeTab, setActiveTabState] = useState<TabType>(() => {
+162-    if (typeof window !== "undefined") {
+163-      const params = new URLSearchParams(window.location.search);
+164-      const tab = params.get("tab") as TabType;
+165-      if (tab && TABS.includes(tab)) {
+166-        return tab;
+167-      }
+168-    }
+169-    return "odontograma";
+170-  });
+171-
+172-  const setActiveTab = (tab: TabType) => {
+173-    setActiveTabState(tab);
+174-    if (typeof window !== "undefined") {
+175-      const params = new URLSearchParams(window.location.search);
+176-      params.set("tab", tab);
+177-      window.history.replaceState(null, "", "?" + params.toString());
+178-      router.invalidate();
+179-    }
+180-  };
+181-
+182-  useEffect(() => {
+183-    if (typeof window !== "undefined") {
+184-      const params = new URLSearchParams(window.location.search);
+185-      const tab = params.get("tab") as TabType;
+186:      if (tab && TABS.includes(tab) && tab !== activeTab) {
+187-        setActiveTabState(tab);
+188-      }
+189-    }
+190:  }, [router.state.location.search, activeTab]);
+191-
+192-  const [anamnesisDraft, setAnamnesisDraft] = useState<Anamnesis | null>(null);
+193-
+194-  if (loading) {
+195-    return (
+196-      <AppLayout>
+197-        <div className="py-10 text-center text-muted-foreground text-sm font-medium animate-pulse">
+198-          Carregando ficha do paciente...
+199-        </div>
+200-      </AppLayout>
+201-    );
+202-  }
+203-
+204-  if (error) {
+205-    return (
+206-      <AppLayout>
+207-        <div className="py-16 text-center">
+208-          <h2 className="text-xl font-display font-bold mb-2 text-rose-600">
+209-            Erro ao carregar dados do paciente
+210-          </h2>
+211-          <p className="text-muted-foreground mb-6 max-w-md mx-auto">{error}</p>
+212-          <Button variant="outline" onClick={() => router.navigate({ to: "/pacientes" })}>
+213-            Voltar para Pacientes
+214-          </Button>
+215-        </div>
+216-      </AppLayout>
+217-    );
+218-  }
+219-
+220-  const patient = patients.find((p) => p.id === patientId);
+221-
+222-  if (!patient) {
+223-    return (
+224-      <AppLayout>
+225-        <div className="py-16 text-center">
+226-          <h2 className="text-xl font-display font-bold mb-2">Paciente não encontrado</h2>
+227-          <p className="text-muted-foreground mb-6">
+228-            Este paciente não existe ou você não tem permissão para acessá-lo.
+229-          </p>
+230-          <Button variant="gold" onClick={() => router.navigate({ to: "/pacientes" })}>
+231-            Voltar para Pacientes
+232-          </Button>
+233-        </div>
+234-      </AppLayout>
+235-    );
+236-  }
+237-
+238-  const age = calcAge(patient.birthDate);
+239-
+240-  return (
+241-    <AppLayout>
+242-      <div className="mb-6 flex items-center justify-between">
+243-        <Button
+244-          variant="outline"
+245-          onClick={() => router.navigate({ to: "/pacientes" })}
+246-          className="h-9 px-3 text-xs"
+247-        >
+248-          <ArrowLeft className="h-4 w-4 mr-2" /> Voltar
+249-        </Button>
+250-      </div>
+251-
+252-      {/* Anamnesis Modal */}
+253-      {anamnesisDraft && (
+254-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+255-          <div className="bg-card w-full max-w-4xl max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+256-            <div className="px-6 py-5 border-b border-border flex items-center justify-between bg-secondary/30">
+257-              <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
+258-                <ClipboardList className="h-5 w-5 text-gold" />
+259:                {anamnesisDraft.id ? "Editar Anamnese" : "Nova Anamnese"}
+260-              </h2>
+261-              <button
+262-                className="text-muted-foreground hover:text-foreground transition-colors p-2"
+263-                onClick={() => setAnamnesisDraft(null)}
+264-              >
+265-                ✕
+266-              </button>
+267-            </div>
+268-
+269-            <div className="p-6 overflow-y-auto space-y-8">
+270-              {/* Seção 1 */}
+271-              <section>
+272-                <h3 className="text-sm font-bold text-gold tracking-wider uppercase mb-4 flex items-center gap-2">
+273-                  <span className="w-6 h-[1px] bg-gold/30"></span> Queixa e Saúde Geral
+274-                </h3>
+275-                <div className="grid sm:grid-cols-2 gap-4">
+276-                  <div className="sm:col-span-2">
+277-                    <Label>Queixa Principal</Label>
+278-                    <Textarea
+279-                      rows={2}
+280-                      value={anamnesisDraft.mainComplaint || ""}
+281-                      onChange={(e) =>
+282-                        setAnamnesisDraft({ ...anamnesisDraft, mainComplaint: e.target.value })
+283-                      }
+284-                      placeholder="Qual o motivo da consulta?"
+285-                    />
+286-                  </div>
+287-                  <div>
+288-                    <Label>Faz uso de alguma medicação?</Label>
+289-                    <Input
+290-                      value={anamnesisDraft.medications || ""}
+291-                      onChange={(e) =>
+292-                        setAnamnesisDraft({ ...anamnesisDraft, medications: e.target.value })
+293-                      }
+294-                      placeholder="Qual(is)?"
+295-                    />
+296-                  </div>
+297-                  <div>
+298-                    <Label>Possui alguma alergia?</Label>
+299-                    <Input
+300-                      value={anamnesisDraft.allergies || ""}
+301-                      onChange={(e) =>
+302-                        setAnamnesisDraft({ ...anamnesisDraft, allergies: e.target.value })
+303-                      }
+304-                      placeholder="Medicamentos, látex, etc..."
+305-                    />
+306-                  </div>
+307-                  <div>
+308-                    <Label>Como é a sua pressão arterial?</Label>
+309-                    <Select
+310-                      value={anamnesisDraft.bloodPressure || ""}
+311-                      onChange={(e) =>
+312-                        setAnamnesisDraft({ ...anamnesisDraft, bloodPressure: e.target.value })
+313-                      }
+314-                    >
+315-                      <option value="">Selecione...</option>
+316-                      <option value="Normal">Normal</option>
+317-                      <option value="Alta">Alta</option>
+318-                      <option value="Baixa">Baixa</option>
+319-                      <option value="Não sabe">Não sabe</option>
+320-                    </Select>
+321-                  </div>
+322-                  <div>
+323-                    <Label>Outros problemas de saúde?</Label>
+324-                    <Input
+325-                      value={anamnesisDraft.healthProblems || ""}
+326-                      onChange={(e) =>
+327-                        setAnamnesisDraft({ ...anamnesisDraft, healthProblems: e.target.value })
+328-                      }
+329-                      placeholder="Doenças pré-existentes..."
+--
+508-                        })
+509-                      }
+510-                    >
+511-                      <option value="">Confirma a veracidade?</option>
+512-                      <option value="true">Sim, declaro que as informações são verdadeiras</option>
+513-                      <option value="false">Não aceito declarar</option>
+514-                    </Select>
+515-                  </div>
+516-                  <div>
+517-                    <Label>Assinatura (Nome)</Label>
+518-                    <Input
+519-                      value={anamnesisDraft.signature || ""}
+520-                      onChange={(e) =>
+521-                        setAnamnesisDraft({ ...anamnesisDraft, signature: e.target.value })
+522-                      }
+523-                      placeholder="Assinatura do paciente..."
+524-                    />
+525-                  </div>
+526-                  <div className="sm:col-span-2">
+527-                    <Label>Observações adicionais da Clínica</Label>
+528-                    <Textarea
+529-                      rows={2}
+530-                      value={anamnesisDraft.notes || ""}
+531-                      onChange={(e) =>
+532-                        setAnamnesisDraft({ ...anamnesisDraft, notes: e.target.value })
+533-                      }
+534-                      placeholder="Anotações internas..."
+535-                    />
+536-                  </div>
+537-                  <div className="sm:col-span-2">
+538:                    <Label>Status da Anamnese</Label>
+539-                    <Select
+540-                      value={anamnesisDraft.status}
+541-                      onChange={(e) =>
+542-                        setAnamnesisDraft({
+543-                          ...anamnesisDraft,
+544-                          status: e.target.value as AnamnesisStatus,
+545-                        })
+546-                      }
+547-                    >
+548-                      {ANAMNESIS_STATUS.map((s) => (
+549-                        <option key={s} value={s}>
+550-                          {s.charAt(0).toUpperCase() + s.slice(1)}
+551-                        </option>
+552-                      ))}
+553-                    </Select>
+554-                  </div>
+555-                </div>
+556-              </section>
+557-            </div>
+558-
+559-            <div className="px-6 py-4 border-t border-border bg-secondary/30 flex justify-end gap-3 mt-auto">
+560-              <Button variant="outline" onClick={() => setAnamnesisDraft(null)}>
+561-                Cancelar
+562-              </Button>
+563-              <Button
+564-                variant="gold"
+565-                onClick={async () => {
+566-                  const isNew = !anamnesisDraft.id;
+567-                  const draft = isNew
+568-                    ? { ...anamnesisDraft, id: crypto.randomUUID() }
+569-                    : anamnesisDraft;
+570:                  await setAnamneses((prev) => {
+571-                    if (isNew) return [draft, ...prev];
+572-                    return prev.map((a) => (a.id === draft.id ? draft : a));
+573-                  });
+574:                  toast.success("Anamnese " + (isNew ? "salva" : "atualizada") + " com sucesso.");
+575-                  setAnamnesisDraft(null);
+576-                }}
+577-              >
+578:                <CheckCircle className="h-4 w-4 mr-2" /> Salvar Anamnese
+579-              </Button>
+580-            </div>
+581-          </div>
+582-        </div>
+583-      )}
+584-
+585-      {/* Header do Paciente */}
+586-      <div className="bg-card border border-border rounded-2xl p-6 shadow-sm mb-6 flex flex-col md:flex-row md:items-start justify-between gap-6">
+587-        <div>
+588-          <div className="flex flex-wrap items-center gap-3 mb-2">
+589-            <h1 className="text-2xl font-display font-bold text-foreground">{patient.fullName}</h1>
+590-          </div>
+591-
+592-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted-foreground">
+593-            {patient.recordNumber && (
+594-              <span className="flex items-center gap-1.5">
+595-                <FileText className="h-4 w-4" /> PR: {patient.recordNumber}
+596-              </span>
+597-            )}
+598-            {age !== null && (
+599-              <span className="flex items-center gap-1.5">
+600-                <Calendar className="h-4 w-4" /> {age} anos
+601-              </span>
+602-            )}
+603-            {(patient.phone || patient.whatsapp) && (
+604-              <span className="flex items-center gap-1.5">
+605-                <Phone className="h-4 w-4" /> {patient.whatsapp || patient.phone}
+606-              </span>
+607-            )}
+608-          </div>
+609-        </div>
+610-      </div>
+611-
+612-      {/* Navegação de Abas */}
+613-      <div className="flex overflow-x-auto no-scrollbar border-b border-border mb-6">
+614-        {TABS.map((tab) => (
+615-          <button
+616-            key={tab}
+617-            onClick={() => setActiveTab(tab)}
+618-            className={`whitespace-nowrap px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+619:              activeTab === tab
+620-                ? "border-gold text-gold"
+621-                : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+622-            }`}
+623-          >
+624-            {TAB_MAP[tab]}
+625-          </button>
+626-        ))}
+627-      </div>
+628-
+629-      {/* Conteúdo das Abas */}
+630-      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+631:        {activeTab === "resumo" && (
+632-          <div className="grid lg:grid-cols-3 gap-6">
+633-            <div className="lg:col-span-1 space-y-6">
+634-              <Card className="p-5">
+635-                <h3 className="font-display font-bold mb-4 flex items-center gap-2">
+636-                  <FileText className="h-4 w-4 text-gold" /> Visão Geral
+637-                </h3>
+638-                <dl className="space-y-3 text-sm">
+639-                  <div className="flex justify-between border-b border-border/50 pb-2">
+640-                    <dt className="text-muted-foreground">Cadastrado em</dt>
+641-                    <dd className="font-medium">
+642-                      {new Date(patient.createdAt).toLocaleDateString()}
+643-                    </dd>
+644-                  </div>
+645-                  <div className="flex justify-between border-b border-border/50 pb-2">
+646-                    <dt className="text-muted-foreground">Telefone</dt>
+647-                    <dd className="font-medium">{patient.phone || "-"}</dd>
+648-                  </div>
+649-                  <div className="flex justify-between border-b border-border/50 pb-2">
+650-                    <dt className="text-muted-foreground">WhatsApp</dt>
+651-                    <dd className="font-medium">{patient.whatsapp || "-"}</dd>
+652-                  </div>
+653-                </dl>
+654-                {patient.administrativeNotes && (
+655-                  <div className="mt-4 pt-4 border-t border-border">
+656-                    <dt className="text-xs text-muted-foreground font-semibold uppercase mb-1">
+657-                      Anotações Administrativas
+658-                    </dt>
+659-                    <dd className="text-sm bg-secondary/50 p-3 rounded-lg border border-border/50">
+660-                      {patient.administrativeNotes}
+661-                    </dd>
+662-                  </div>
+663-                )}
+664-              </Card>
+665-
+666-              <Card className="p-5 mt-4">
+667-                <h3 className="font-display font-bold mb-4 flex items-center gap-2">
+668-                  <MessageCircle className="h-4 w-4 text-[#C9A227]" /> Comunicações
+669-                </h3>
+670-
+671-                <div className="text-xs space-y-4">
+672-                  <div className="flex justify-between items-center bg-gray-50 border p-2.5 rounded-lg">
+673-                    <span className="font-semibold text-gray-700">Consentimento de Disparo:</span>
+674-                    <Badge tone="ok">Autorizado</Badge>
+675-                  </div>
+676-
+677-                  <div className="space-y-2">
+678-                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">
+679-                      Histórico de WhatsApp
+680-                    </span>
+681-                    {patientLogs.length === 0 ? (
+682-                      <p className="text-muted-foreground italic text-[11px] py-3 text-center border border-dashed rounded bg-gray-50/50">
+683-                        Nenhuma mensagem enviada.
+684-                      </p>
+685-                    ) : (
+686-                      <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5">
+687-                        {patientLogs.map((l, idx) => (
+688-                          <div
+689-                            key={l.id || idx}
+690-                            className="p-2 border rounded bg-white text-[11px] space-y-1 hover:border-gold/30 transition"
+691-                          >
+692-                            <div className="flex justify-between items-center gap-2">
+693-                              <span className="text-muted-foreground font-semibold">
+694-                                {new Date(l.createdAt).toLocaleDateString("pt-BR")}
+695-                              </span>
+696-                              <Badge
+697-                                tone={
+698-                                  l.status === "enviada" || l.status === "aberta_manual"
+699-                                    ? "ok"
+700-                                    : l.status === "simulada"
+701-                                      ? "neutral"
+--
+901-                    <div className="bg-gray-50 p-2 rounded border border-gray-100">
+902-                      <span className="text-[10px] text-muted-foreground font-semibold block uppercase">
+903-                        Orçado
+904-                      </span>
+905-                      <span className="text-xs font-bold text-gray-700 block mt-0.5">
+906-                        R$ {totalOrcado.toFixed(2)}
+907-                      </span>
+908-                    </div>
+909-                    <div className="bg-emerald-50/50 p-2 rounded border border-emerald-100">
+910-                      <span className="text-[10px] text-emerald-700 font-semibold block uppercase">
+911-                        Pago
+912-                      </span>
+913-                      <span className="text-xs font-bold text-emerald-600 block mt-0.5">
+914-                        R$ {totalPago.toFixed(2)}
+915-                      </span>
+916-                    </div>
+917-                    <div className="bg-rose-50/50 p-2 rounded border border-rose-100">
+918-                      <span className="text-[10px] text-rose-700 font-semibold block uppercase">
+919-                        A Pagar
+920-                      </span>
+921-                      <span className="text-xs font-bold text-rose-600 block mt-0.5">
+922-                        R$ {saldoDevedor.toFixed(2)}
+923-                      </span>
+924-                    </div>
+925-                  </div>
+926-                </div>
+927-                <Button
+928-                  variant="outline"
+929-                  size="sm"
+930-                  className="w-full text-xs h-8 font-semibold mt-4"
+931:                  onClick={() => setActiveTab("financeiro")}
+932-                >
+933:                  Ver financeiro detalhado
+934-                </Button>
+935-              </Card>
+936-              <Card className="p-5 flex flex-col justify-between h-auto min-h-[160px] bg-white border border-border">
+937-                <div>
+938-                  <h4 className="font-semibold text-sm flex items-center gap-2 mb-3 text-gray-800">
+939-                    <ClipboardList className="h-4 w-4 text-gold" />
+940-                    Última Evolução Clínica
+941-                  </h4>
+942-                  {latestEvolution ? (
+943-                    <div className="space-y-1">
+944-                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+945-                        <span>{new Date(latestEvolution.recordDate).toLocaleDateString()}</span>
+946-                        {latestEvolution.procedureName && (
+947-                          <Badge tone="gold" className="text-[9px] py-0">
+948-                            {latestEvolution.procedureName}
+949-                          </Badge>
+950-                        )}
+951-                      </div>
+952-                      <p className="text-xs text-gray-700 line-clamp-2 mt-1 leading-relaxed">
+953-                        {latestEvolution.description}
+954-                      </p>
+955-                    </div>
+956-                  ) : (
+957-                    <p className="text-xs text-muted-foreground my-auto text-center italic">
+958-                      Nenhuma evolução registrada.
+959-                    </p>
+960-                  )}
+961-                </div>
+962-                <Button
+963-                  variant="outline"
+964-                  size="sm"
+965-                  className="w-full text-xs h-8 font-semibold mt-4"
+966:                  onClick={() => setActiveTab("ficha-clinica")}
+967-                >
+968-                  Ver ficha clínica
+969-                </Button>
+970-              </Card>
+971-            </div>
+972-          </div>
+973-        )}
+974-
+975:        {activeTab === "dados-pessoais" && (
+976-          <PatientPersonalDataTab
+977-            patient={patient}
+978-            onSave={async (updatedPatient) => {
+979-              await setPatients((current) =>
+980-                current.map((item) => (item.id === updatedPatient.id ? updatedPatient : item)),
+981-              );
+982-            }}
+983-          />
+984-        )}
+985-
+986:        {activeTab === "anamnese" && (
+987-          <div className="space-y-6">
+988-            <div className="flex items-center justify-between">
+989-              <h2 className="font-display font-bold text-lg flex items-center gap-2">
+990-                <ClipboardList className="h-5 w-5 text-gold" />
+991:                Histórico de Anamneses
+992-              </h2>
+993-              <Button
+994-                variant="gold"
+995-                onClick={() =>
+996-                  setAnamnesisDraft({
+997-                    id: "",
+998-                    patientId: patientId,
+999-                    status: "rascunho",
+1000-                    createdAt: new Date().toISOString(),
+1001-                    updatedAt: new Date().toISOString(),
+1002-                  } as Anamnesis)
+1003-                }
+1004-              >
+1005:                <Plus className="h-4 w-4 mr-2" /> Nova Anamnese
+1006-              </Button>
+1007-            </div>
+1008-
+1009-            {errorAnamnesis && (
+1010-              <div className="bg-rose-50 text-rose-700 p-4 rounded-lg border border-rose-200">
+1011-                <h4 className="font-bold mb-1">Erro ao carregar anamneses</h4>
+1012-                <p className="text-sm">{errorAnamnesis}</p>
+1013-              </div>
+1014-            )}
+1015-
+1016-            {loadingAnamnesis ? (
+1017-              <div className="text-center py-10 text-muted-foreground animate-pulse">
+1018-                Carregando histórico...
+1019-              </div>
+1020-            ) : anamneses.length === 0 ? (
+1021-              <div className="text-center py-16 bg-secondary/20 rounded-2xl border-2 border-dashed border-border/60">
+1022-                <div className="h-16 w-16 bg-gold/10 text-gold rounded-full flex items-center justify-center mx-auto mb-4">
+1023-                  <ClipboardList className="h-8 w-8" />
+1024-                </div>
+1025-                <h3 className="text-lg font-display font-semibold mb-1">Nenhuma anamnese</h3>
+1026-                <p className="text-muted-foreground text-sm max-w-md mx-auto">
+1027-                  Nenhuma anamnese cadastrada para este paciente. Clique no botão acima para
+1028-                  preencher a primeira ficha clínica de saúde.
+1029-                </p>
+1030-              </div>
+1031-            ) : (
+1032-              <div className="grid gap-4">
+1033-                {anamneses.map((anamnesis) => (
+1034-                  <Card
+1035-                    key={anamnesis.id}
+1036-                    className="p-5 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center"
+1037-                  >
+1038-                    <div>
+1039-                      <div className="flex items-center gap-3 mb-1">
+1040-                        <span className="font-semibold">
+1041-                          {new Date(anamnesis.createdAt).toLocaleDateString()}
+1042-                        </span>
+1043-                        <Badge
+1044-                          tone={
+1045-                            anamnesis.status === "assinada"
+1046-                              ? "ok"
+1047-                              : anamnesis.status === "concluída"
+1048-                                ? "gold"
+1049-                                : "warn"
+1050-                          }
+1051-                        >
+1052-                          {anamnesis.status}
+1053-                        </Badge>
+1054-                      </div>
+1055-                      <p className="text-sm text-muted-foreground line-clamp-1">
+1056-                        <span className="font-medium">Queixa principal:</span>{" "}
+1057-                        {anamnesis.mainComplaint || "Não informada"}
+1058-                      </p>
+1059-                    </div>
+1060-                    <Button
+1061-                      variant="outline"
+1062-                      size="sm"
+1063-                      onClick={() => setAnamnesisDraft({ ...anamnesis })}
+1064-                    >
+1065-                      <Edit3 className="h-4 w-4 mr-2" /> Ver / Editar
+1066-                    </Button>
+1067-                  </Card>
+1068-                ))}
+1069-              </div>
+1070-            )}
+1071-          </div>
+1072-        )}
+1073-
+1074:        {activeTab === "odontograma" && (
+1075-          <div className="space-y-6">
+1076-            <OdontogramTab patientId={patient.id} />
+1077-          </div>
+1078-        )}
+1079-
+1080:        {activeTab === "plano-tratamento" && <TreatmentPlanTab patientId={patient.id} />}
+1081-
+1082:        {activeTab === "financeiro" && <FinanceTab patientId={patient.id} />}
+1083-
+1084:        {activeTab === "fotos-clinicas" && <ClinicalPhotosTab patientId={patient.id} />}
+1085-
+1086:        {activeTab === "ficha-clinica" && <ClinicalRecordTab patientId={patient.id} />}
+1087-
+1088:        {activeTab === "documentos" && <DocumentsTab patientId={patient.id} />}
+1089-
+1090:        {activeTab !== "resumo" &&
+1091:          activeTab !== "dados-pessoais" &&
+1092:          activeTab !== "anamnese" &&
+1093:          activeTab !== "odontograma" &&
+1094:          activeTab !== "plano-tratamento" &&
+1095:          activeTab !== "financeiro" &&
+1096:          activeTab !== "fotos-clinicas" &&
+1097:          activeTab !== "ficha-clinica" &&
+1098:          activeTab !== "documentos" && (
+1099-            <div className="py-24 text-center">
+1100-              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-secondary text-muted-foreground mb-4">
+1101-                <Activity className="h-8 w-8 opacity-50" />
+1102-              </div>
+1103-              <h3 className="text-xl font-display font-semibold mb-2">
+1104:                {TAB_MAP[activeTab] || activeTab}
+1105-              </h3>
+1106-              <p className="text-muted-foreground max-w-md mx-auto">
+1107-                Este módulo estará disponível na próxima fase de desenvolvimento da plataforma.
+1108-              </p>
+1109-              <Badge tone="warn" className="mt-4">
+1110-                Em breve
+1111-              </Badge>
+1112-            </div>
+1113-          )}
+1114-      </div>
+1115-    </AppLayout>
+1116-  );
+1117-}

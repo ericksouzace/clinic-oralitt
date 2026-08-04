@@ -566,11 +566,6 @@ export function AgendaPage() {
       return;
     }
 
-    if (draft.withPartner && !draft.partnerName?.trim()) {
-      toast.error("Informe o nome do dentista parceiro.");
-      return;
-    }
-
     const titleVal = draft.title.trim();
 
     const appointmentToSave: Appointment = {
@@ -587,13 +582,6 @@ export function AgendaPage() {
       type: "consulta",
       notes: draft.notes,
       whatsappReminder: draft.whatsappReminder ?? false,
-      withPartner: draft.withPartner ?? false,
-      partnerName: draft.withPartner
-        ? draft.partnerName?.trim() || undefined
-        : undefined,
-      partnerReason: draft.withPartner
-        ? draft.partnerReason?.trim() || undefined
-        : undefined,
       createdAt: draft.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1506,83 +1494,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
                 rows={3}
                 className="min-h-[80px] w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition resize-none"
               />
-            </div>
-
-            {/* Agendamento com parceiro */}
-            <div className="rounded-xl border border-border bg-[#fcfbf8] p-4">
-              <div className="flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  id="withPartner"
-                  checked={draft.withPartner ?? false}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      withPartner: event.target.checked,
-                      partnerName: event.target.checked
-                        ? current.partnerName || ""
-                        : undefined,
-                      partnerReason: event.target.checked
-                        ? current.partnerReason || ""
-                        : undefined,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-gray-300 accent-[#C9A227]"
-                />
-
-                <label
-                  htmlFor="withPartner"
-                  className="cursor-pointer select-none text-sm font-bold text-foreground"
-                >
-                  Marcar com parceiro
-                </label>
-              </div>
-
-              <p className="mt-1 pl-6 text-xs text-muted-foreground">
-                Use quando o atendimento precisar do auxílio de outro dentista.
-              </p>
-
-              {draft.withPartner && (
-                <div className="mt-4 grid gap-4">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-foreground/80">
-                      Dentista parceiro <span className="text-red-500">*</span>
-                    </label>
-
-                    <input
-                      type="text"
-                      value={draft.partnerName || ""}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          partnerName: event.target.value,
-                        }))
-                      }
-                      placeholder="Ex.: Dra. Ana Paula"
-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/40"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-foreground/80">
-                      Motivo da participação
-                    </label>
-
-                    <textarea
-                      value={draft.partnerReason || ""}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          partnerReason: event.target.value,
-                        }))
-                      }
-                      placeholder="Ex.: Auxílio em cirurgia, avaliação conjunta..."
-                      rows={3}
-                      className="min-h-[76px] w-full resize-none rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/40"
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* WhatsApp reminder checkbox */}

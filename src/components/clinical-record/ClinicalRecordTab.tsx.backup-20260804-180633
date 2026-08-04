@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import {
   ArrowDownWideNarrow,
-  BellPlus,
   Check,
   Edit3,
   Plus,
@@ -357,46 +356,6 @@ export function ClinicalRecordTab({ patientId }: Props) {
                   </span>
 
                   <div className="flex justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 text-[#8A6A16] hover:bg-amber-50 hover:text-[#8A6A16]"
-                      onClick={() => {
-                        const params = new URLSearchParams(
-                          window.location.search,
-                        );
-
-                        params.set("tab", "lembretes");
-                        params.set("newReminder", "true");
-                        params.set(
-                          "clinicalRecordId",
-                          record.id,
-                        );
-                        params.set(
-                          "reminderTitle",
-                          `Retorno: ${
-                            record.description ||
-                            record.procedureName ||
-                            "procedimento"
-                          }`,
-                        );
-
-                        window.history.pushState(
-                          null,
-                          "",
-                          `${window.location.pathname}?${params.toString()}`,
-                        );
-
-                        window.dispatchEvent(
-                          new PopStateEvent("popstate"),
-                        );
-                      }}
-                      title="Adicionar lembrete"
-                    >
-                      <BellPlus className="h-4 w-4" />
-                    </Button>
-
                     <Button
                       type="button"
                       variant="ghost"

@@ -182,12 +182,6 @@ export interface Appointment {
   type: AppointmentType;
   notes?: string;
   whatsappReminder: boolean;
-
-  // Atendimento realizado com auxílio de outro profissional
-  withPartner?: boolean;
-  partnerName?: string;
-  partnerReason?: string;
-
   createdAt: string;
   updatedAt: string;
 

@@ -14,19 +14,9 @@ import {
 import { toast } from "sonner";
 import AppLayout from "@/components/AppLayout";
 import { PageHeader, Card, Button, Input, Label, Select, Badge } from "@/components/ui-bits";
-import {
-  usePatients,
-  usePatientReminders,
-  usePatientFinancialBalances,
-} from "@/lib/db";
+import { usePatients, usePatientReminders } from "@/lib/db";
 import { PatientComorbidities } from "@/components/patient/PatientComorbidities";
-import {
-  Patient,
-  PatientStatus,
-  PATIENT_STATUS,
-  PATIENT_GENDERS,
-  PATIENT_MARITAL_STATUSES,
-} from "@/lib/store";
+import { Patient, PatientStatus, PATIENT_STATUS, PATIENT_GENDERS, PATIENT_MARITAL_STATUSES } from "@/lib/store";
 
 export const Route = createFileRoute("/pacientes/")({
   head: () => ({ meta: [{ title: "Pacientes — Oralit" }] }),
@@ -102,32 +92,11 @@ const emptyPatient = (): Patient => ({
   createdAt: new Date().toISOString(),
 });
 
-
-type PatientFilter =
-  | PatientStatus
-  | "todos"
-  | "saldo positivo"
-  | "saldo negativo";
-
-function formatPatientBalance(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
 function PacientesPage() {
   const [patients, setPatients, loading, error] = usePatients();
   const [patientReminders] = usePatientReminders();
-  const [
-    patientBalances,
-    balancesLoading,
-    balancesError,
-  ] = usePatientFinancialBalances();
-
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] =
-    useState<PatientFilter>("todos");
+  const [statusFilter, setStatusFilter] = useState<PatientStatus | "todos">("todos");
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Patient | null>(null);
@@ -142,27 +111,10 @@ function PacientesPage() {
         (p.whatsapp && p.whatsapp.includes(q)) ||
         (p.recordNumber && p.recordNumber.toLowerCase().includes(q));
       
-      const balance =
-        patientBalances[p.id]?.balance || 0;
-
-      let matchStatus = true;
-
-      if (statusFilter === "saldo positivo") {
-        matchStatus = balance > 0.009;
-      } else if (statusFilter === "saldo negativo") {
-        matchStatus = balance < -0.009;
-      } else if (statusFilter !== "todos") {
-        matchStatus = p.status === statusFilter;
-      }
-
+      const matchStatus = statusFilter === "todos" || p.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [
-    patients,
-    search,
-    statusFilter,
-    patientBalances,
-  ]);
+  }, [patients, search, statusFilter]);
 
   const remove = async (id: string) => {
     try {
@@ -358,20 +310,6 @@ function PacientesPage() {
         </div>
       )}
 
-      {(balancesLoading || balancesError) && (
-        <div
-          className={`mb-4 rounded-xl border px-4 py-3 text-xs ${
-            balancesError
-              ? "border-rose-200 bg-rose-50 text-rose-700"
-              : "border-border bg-secondary/30 text-muted-foreground"
-          }`}
-        >
-          {balancesError
-            ? `Não foi possível carregar os saldos: ${balancesError}`
-            : "Atualizando saldos financeiros dos pacientes..."}
-        </div>
-      )}
-
       <Card className="mb-6 p-5">
         <div className="space-y-4">
           <div className="grid gap-4 lg:grid-cols-[minmax(420px,1fr)_240px]">
@@ -400,66 +338,16 @@ function PacientesPage() {
                 onChange={(e) => setStatusFilter(e.target.value as any)}
               >
                 <option value="todos">Todos os status</option>
-
-                <optgroup label="Situação do paciente">
-                  {PATIENT_STATUS.map((s) => (
-                    <option key={s} value={s}>
-                      {s.charAt(0).toUpperCase() +
-                        s.slice(1)}
-                    </option>
-                  ))}
-                </optgroup>
-
-                <optgroup label="Situação financeira">
-                  <option value="saldo positivo">
-                    Saldo positivo
+                {PATIENT_STATUS.map((s) => (
+                  <option key={s} value={s}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
                   </option>
-
-                  <option value="saldo negativo">
-                    Saldo negativo
-                  </option>
-                </optgroup>
+                ))}
               </Select>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <button
-              type="button"
-              onClick={() =>
-                setStatusFilter("saldo positivo")
-              }
-              className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                statusFilter === "saldo positivo"
-                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                  : "border-border bg-card text-muted-foreground hover:bg-emerald-50/50"
-              }`}
-            >
-              Saldo positivo
-
-              <span className="mt-1 block text-xs font-normal">
-                Pacientes com crédito disponível na clínica.
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                setStatusFilter("saldo negativo")
-              }
-              className={`rounded-2xl border px-4 py-3 text-left text-sm font-semibold transition ${
-                statusFilter === "saldo negativo"
-                  ? "border-rose-500 bg-rose-50 text-rose-700"
-                  : "border-border bg-card text-muted-foreground hover:bg-rose-50/50"
-              }`}
-            >
-              Saldo negativo
-
-              <span className="mt-1 block text-xs font-normal">
-                Pacientes com valores pendentes na clínica.
-              </span>
-            </button>
-
             <button
               type="button"
               onClick={() => setStatusFilter("em tratamento")}
@@ -496,16 +384,6 @@ function PacientesPage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((p) => {
           const age = calcAge(p.birthDate);
-
-          const financial =
-            patientBalances[p.id] || {
-              patientId: p.id,
-              totalReceived: 0,
-              totalPerformed: 0,
-              balance: 0,
-            };
-
-          const patientBalance = financial.balance;
 
           const visibleReminders = patientReminders
             .filter(
@@ -559,66 +437,7 @@ function PacientesPage() {
                     </div>
                   )}
 
-                  <PatientComorbidities
-                    patientId={p.id}
-                    mode="button"
-                  />
-
-                  <div
-                    className={`rounded-xl border px-3 py-2.5 ${
-                      patientBalance > 0.009
-                        ? "border-emerald-200 bg-emerald-50"
-                        : patientBalance < -0.009
-                          ? "border-rose-200 bg-rose-50"
-                          : "border-slate-200 bg-slate-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div
-                          className={`text-[10px] font-extrabold uppercase tracking-wide ${
-                            patientBalance > 0.009
-                              ? "text-emerald-700"
-                              : patientBalance < -0.009
-                                ? "text-rose-700"
-                                : "text-slate-500"
-                          }`}
-                        >
-                          Saldo financeiro
-                        </div>
-
-                        <div
-                          className={`mt-0.5 text-sm font-extrabold ${
-                            patientBalance > 0.009
-                              ? "text-emerald-700"
-                              : patientBalance < -0.009
-                                ? "text-rose-700"
-                                : "text-slate-600"
-                          }`}
-                        >
-                          {formatPatientBalance(
-                            patientBalance,
-                          )}
-                        </div>
-                      </div>
-
-                      <div
-                        className={`text-[10px] font-bold ${
-                          patientBalance > 0.009
-                            ? "text-emerald-700"
-                            : patientBalance < -0.009
-                              ? "text-rose-700"
-                              : "text-slate-500"
-                        }`}
-                      >
-                        {patientBalance > 0.009
-                          ? "Crédito"
-                          : patientBalance < -0.009
-                            ? "Pendente"
-                            : "Zerado"}
-                      </div>
-                    </div>
-                  </div>
+                  <PatientComorbidities patientId={p.id} mode="button" />
 
                   {primaryReminder && (
                     <Link

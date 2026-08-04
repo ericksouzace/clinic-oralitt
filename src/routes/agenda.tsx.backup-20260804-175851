@@ -11,38 +11,13 @@ import {
   useSupplies,
   saveClinicalRecord,
   savePayment,
-  usePatientReminders,
-  savePatientReminder,
 } from "@/lib/db";
 import { supabase } from "@/integrations/supabase/client";
-import {
-  Appointment,
-  AppointmentStatus,
-  uid,
-  ClinicalRecord,
-  ClinicalRecordSupply,
-  PatientReminder,
-} from "@/lib/store";
+import { Appointment, AppointmentStatus, uid, ClinicalRecord, ClinicalRecordSupply } from "@/lib/store";
 import { toast } from "sonner";
 import {
-  Calendar,
-  Plus,
-  Search,
-  Clock,
-  Activity,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Filter,
-  Trash2,
-  DollarSign,
-  Package,
-  Stethoscope,
-  Bell,
-  CalendarClock,
-  MessageCircle,
-  RotateCcw,
-  Eye,
+  Calendar, Plus, Search, Clock, Activity,
+  CheckCircle, XCircle, AlertTriangle, Filter, Trash2, DollarSign, Package, Stethoscope
 } from "lucide-react";
 import { Input, Label, Select, Textarea } from "@/components/ui-bits";
 import { AgendaCalendar } from "@/components/agenda/AgendaCalendar";
@@ -64,92 +39,6 @@ function cleanPhoneNumber(phone: string): string {
   return cleaned;
 }
 
-
-function reminderToday() {
-  const date = new Date();
-  const offset = date.getTimezoneOffset() * 60_000;
-
-  return new Date(date.getTime() - offset)
-    .toISOString()
-    .split("T")[0];
-}
-
-function reminderDate(value: string) {
-  return new Date(`${value}T12:00:00`);
-}
-
-function reminderDateLabel(value: string) {
-  return reminderDate(value).toLocaleDateString("pt-BR");
-}
-
-function reminderDaysDifference(value: string) {
-  const today = reminderDate(reminderToday());
-  const target = reminderDate(value);
-
-  return Math.round(
-    (target.getTime() - today.getTime()) / 86_400_000,
-  );
-}
-
-function reminderStatusLabel(reminder: PatientReminder) {
-  if (reminder.status === "concluído") return "Concluído";
-  if (reminder.status === "cancelado") return "Cancelado";
-  if (reminder.status === "agendado") return "Agendado";
-
-  const difference = reminderDaysDifference(reminder.reminderDate);
-
-  if (difference < 0) {
-    const days = Math.abs(difference);
-    return `Vencido há ${days} ${days === 1 ? "dia" : "dias"}`;
-  }
-
-  if (difference === 0) return "Hoje";
-  if (difference === 1) return "Amanhã";
-
-  return `Em ${difference} dias`;
-}
-
-function reminderTone(reminder: PatientReminder) {
-  if (reminder.status === "concluído") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  }
-
-  if (reminder.status === "agendado") {
-    return "border-blue-200 bg-blue-50 text-blue-800";
-  }
-
-  if (reminder.status === "cancelado") {
-    return "border-slate-200 bg-slate-50 text-slate-600";
-  }
-
-  const difference = reminderDaysDifference(reminder.reminderDate);
-
-  if (difference < 0) {
-    return "border-rose-200 bg-rose-50 text-rose-800";
-  }
-
-  if (difference <= 7) {
-    return "border-amber-300 bg-amber-50 text-amber-900";
-  }
-
-  if (difference <= 14) {
-    return "border-yellow-200 bg-yellow-50 text-yellow-900";
-  }
-
-  return "border-border bg-white text-foreground";
-}
-
-function addReminderDays(value: string, days: number) {
-  const date = reminderDate(value);
-  date.setDate(date.getDate() + days);
-
-  const offset = date.getTimezoneOffset() * 60_000;
-
-  return new Date(date.getTime() - offset)
-    .toISOString()
-    .split("T")[0];
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function AgendaPage() {
@@ -161,8 +50,6 @@ export function AgendaPage() {
   const [patients] = usePatients();
   const [procedures] = useProcedures();
   const [supplies] = useSupplies();
-  const [reminders, remindersLoading, remindersError, refetchReminders] =
-    usePatientReminders();
 
   // ── Calendar state ────────────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split("T")[0];
@@ -182,12 +69,7 @@ export function AgendaPage() {
   const [draft, setDraft] = useState<Partial<Appointment>>({});
   const [saving, setSaving] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState("");
-
-  const [remindersModalOpen, setRemindersModalOpen] = useState(false);
-  const [reminderFilter, setReminderFilter] = useState<
-    "todos" | "hoje" | "semana" | "mes" | "vencidos"
-  >("semana");
-  const [reminderBusyId, setReminderBusyId] = useState<string | null>(null);
+  const [patientPlans, setPatientPlans] = useState<any[]>([]);
 
   // ── Completion Flow Modal States ──────────────────────────────────────────
   const [completionAppt, setCompletionAppt] = useState<Appointment | null>(null);
@@ -486,12 +368,25 @@ export function AgendaPage() {
     setViewMonth(`${y}-${m}-01`);
   }
 
+  // ── Patient plans loader ──────────────────────────────────────────────────
+  async function loadPlansForPatient(patientId: string) {
+    if (!patientId) { setPatientPlans([]); return; }
+    try {
+      const { data } = await supabase
+        .from("treatment_plans")
+        .select("id, title, status")
+        .eq("patient_id", patientId);
+      setPatientPlans(data || []);
+    } catch (err) {
+      console.error("Error loading patient plans:", err);
+      setPatientPlans([]);
+    }
+  }
+
   async function handlePatientChange(patientId: string) {
     setSelectedPatientId(patientId);
-    setDraft((previous) => ({
-      ...previous,
-      patientId,
-    }));
+    setDraft(prev => ({ ...prev, patientId, treatmentPlanId: undefined }));
+    await loadPlansForPatient(patientId);
   }
 
   // ── Open modal helpers ────────────────────────────────────────────────────
@@ -505,6 +400,11 @@ export function AgendaPage() {
       whatsappReminder: true,
     });
     setSelectedPatientId(preselectedPatientId || "");
+    if (preselectedPatientId) {
+      loadPlansForPatient(preselectedPatientId);
+    } else {
+      setPatientPlans([]);
+    }
     setIsModalOpen(true);
   }
 
@@ -517,6 +417,7 @@ export function AgendaPage() {
       type: "consulta",
     });
     setSelectedPatientId(app.patientId);
+    await loadPlansForPatient(app.patientId);
     setIsModalOpen(true);
   }
 
@@ -566,11 +467,6 @@ export function AgendaPage() {
       return;
     }
 
-    if (draft.withPartner && !draft.partnerName?.trim()) {
-      toast.error("Informe o nome do dentista parceiro.");
-      return;
-    }
-
     const titleVal = draft.title.trim();
 
     const appointmentToSave: Appointment = {
@@ -587,13 +483,6 @@ export function AgendaPage() {
       type: "consulta",
       notes: draft.notes,
       whatsappReminder: draft.whatsappReminder ?? false,
-      withPartner: draft.withPartner ?? false,
-      partnerName: draft.withPartner
-        ? draft.partnerName?.trim() || undefined
-        : undefined,
-      partnerReason: draft.withPartner
-        ? draft.partnerReason?.trim() || undefined
-        : undefined,
       createdAt: draft.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -606,33 +495,6 @@ export function AgendaPage() {
     try {
       setSaving(true);
       await saveAppointment(appointmentToSave);
-
-      const linkedReminderId =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem(
-              "oralit:appointment-reminder-id",
-            )
-          : null;
-
-      if (linkedReminderId) {
-        const linkedReminder = reminders.find(
-          (item) => item.id === linkedReminderId,
-        );
-
-        if (linkedReminder) {
-          await savePatientReminder({
-            ...linkedReminder,
-            status: "agendado",
-          });
-        }
-
-        sessionStorage.removeItem(
-          "oralit:appointment-reminder-id",
-        );
-
-        refetchReminders();
-      }
-
       toast.success(draft.id ? "Agendamento atualizado!" : "Agendamento criado!");
       // Navigate selectedDate to the saved date so calendar highlights it
       setSelectedDate(appointmentToSave.appointmentDate);
@@ -706,192 +568,6 @@ export function AgendaPage() {
     () => filteredAll.filter(a => a.appointmentDate === selectedDate),
     [filteredAll, selectedDate]
   );
-
-  const filteredReminders = useMemo(() => {
-    const today = reminderToday();
-    const current = reminderDate(today);
-
-    const startWeek = new Date(current);
-    const currentWeekDay = startWeek.getDay();
-    const distanceToMonday =
-      currentWeekDay === 0 ? -6 : 1 - currentWeekDay;
-
-    startWeek.setDate(startWeek.getDate() + distanceToMonday);
-
-    const endWeek = new Date(startWeek);
-    endWeek.setDate(endWeek.getDate() + 6);
-
-    return [...reminders]
-      .filter((reminder) => {
-        const date = reminderDate(reminder.reminderDate);
-
-        if (reminderFilter === "hoje") {
-          return reminder.reminderDate === today;
-        }
-
-        if (reminderFilter === "semana") {
-          return date >= startWeek && date <= endWeek;
-        }
-
-        if (reminderFilter === "mes") {
-          return (
-            date.getMonth() === current.getMonth() &&
-            date.getFullYear() === current.getFullYear()
-          );
-        }
-
-        if (reminderFilter === "vencidos") {
-          return (
-            reminder.status === "pendente" &&
-            reminder.reminderDate < today
-          );
-        }
-
-        return true;
-      })
-      .sort((a, b) => {
-        const weight = (item: PatientReminder) => {
-          if (
-            item.status === "pendente" &&
-            item.reminderDate < today
-          ) {
-            return 0;
-          }
-
-          if (item.status === "pendente") return 1;
-          if (item.status === "agendado") return 2;
-          if (item.status === "concluído") return 3;
-
-          return 4;
-        };
-
-        const weightDifference = weight(a) - weight(b);
-
-        if (weightDifference !== 0) {
-          return weightDifference;
-        }
-
-        return a.reminderDate.localeCompare(b.reminderDate);
-      });
-  }, [reminders, reminderFilter]);
-
-  const activeReminderCount = useMemo(() => {
-    const today = reminderToday();
-    const limit = addReminderDays(today, 14);
-
-    return reminders.filter(
-      (reminder) =>
-        reminder.status === "pendente" &&
-        reminder.reminderDate <= limit,
-    ).length;
-  }, [reminders]);
-
-  async function postponeReminder(
-    reminder: PatientReminder,
-    days: number,
-  ) {
-    try {
-      setReminderBusyId(reminder.id);
-
-      await savePatientReminder({
-        ...reminder,
-        reminderDate: addReminderDays(
-          reminder.reminderDate,
-          days,
-        ),
-        status: "pendente",
-        postponedCount:
-          Number(reminder.postponedCount || 0) + 1,
-      });
-
-      toast.success(`Lembrete adiado por ${days} dias.`);
-      refetchReminders();
-    } catch (error: any) {
-      toast.error(
-        error?.message || "Não foi possível adiar o lembrete.",
-      );
-    } finally {
-      setReminderBusyId(null);
-    }
-  }
-
-  async function completeReminder(reminder: PatientReminder) {
-    try {
-      setReminderBusyId(reminder.id);
-
-      await savePatientReminder({
-        ...reminder,
-        status: "concluído",
-        completedAt: new Date().toISOString(),
-        completionReason: "Concluído pela Agenda",
-      });
-
-      toast.success("Lembrete concluído.");
-      refetchReminders();
-    } catch (error: any) {
-      toast.error(
-        error?.message ||
-          "Não foi possível concluir o lembrete.",
-      );
-    } finally {
-      setReminderBusyId(null);
-    }
-  }
-
-  function openReminderWhatsApp(reminder: PatientReminder) {
-    const patient = patients.find(
-      (item) => item.id === reminder.patientId,
-    );
-
-    const rawPhone =
-      reminder.patientPhone ||
-      patient?.whatsapp ||
-      patient?.phone ||
-      "";
-
-    if (!rawPhone) {
-      toast.error("Paciente sem WhatsApp cadastrado.");
-      return;
-    }
-
-    const phone = cleanPhoneNumber(rawPhone);
-
-    const message = encodeURIComponent(
-      `Olá, ${reminder.patientName || patient?.fullName || ""}! Tudo bem? ` +
-        `Estamos entrando em contato pela Oralit para organizar seu retorno: ` +
-        `${reminder.title}. Data prevista: ${reminderDateLabel(reminder.reminderDate)}.`,
-    );
-
-    window.open(
-      `https://wa.me/${phone}?text=${message}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
-  }
-
-  function createAppointmentFromReminder(
-    reminder: PatientReminder,
-  ) {
-    setDraft({
-      appointmentDate: reminder.reminderDate,
-      startTime: "09:00",
-      endTime: "10:00",
-      status: "agendado",
-      type: "consulta",
-      title: reminder.title,
-      notes: reminder.description || "",
-      whatsappReminder: true,
-    });
-
-    setSelectedPatientId(reminder.patientId);
-    setRemindersModalOpen(false);
-    setIsModalOpen(true);
-
-    sessionStorage.setItem(
-      "oralit:appointment-reminder-id",
-      reminder.id,
-    );
-  }
 
   // ── Stats (based on ALL appointments, not filtered, today only) ───────────
   const stats = useMemo(() => {
@@ -1088,21 +764,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
         {/* ── Filters bar ───────────────────────────────────────────────────── */}
         <div className="bg-white border border-border/60 rounded-xl p-4 shadow-sm">
           <div className="flex flex-wrap gap-3 items-end">
-            <button
-              type="button"
-              onClick={() => setRemindersModalOpen(true)}
-              className="relative inline-flex h-9 items-center justify-center gap-2 rounded-lg border border-[#C9A227]/40 bg-[#fff9e8] px-3 text-xs font-extrabold text-[#8A6A16] transition hover:border-[#C9A227] hover:bg-[#fff4cf]"
-            >
-              <Bell className="h-4 w-4" />
-              Lembretes
-
-              {activeReminderCount > 0 && (
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[10px] font-extrabold text-white">
-                  {activeReminderCount}
-                </span>
-              )}
-            </button>
-
             <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <Filter className="w-3.5 h-3.5" /> Filtros:
             </div>
@@ -1183,215 +844,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
         )}
 
       </div>
-
-      {/* ── Central de Lembretes ────────────────────────────────────────────── */}
-      <Dialog
-        open={remindersModalOpen}
-        onOpenChange={setRemindersModalOpen}
-      >
-        <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 font-display text-lg font-extrabold">
-              <Bell className="h-5 w-5 text-[#C9A227]" />
-              Central de Lembretes
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="flex flex-wrap gap-2">
-              {[
-                ["todos", "Todos"],
-                ["hoje", "Hoje"],
-                ["semana", "Semana"],
-                ["mes", "Mês"],
-                ["vencidos", "Vencidos"],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() =>
-                    setReminderFilter(
-                      value as
-                        | "todos"
-                        | "hoje"
-                        | "semana"
-                        | "mes"
-                        | "vencidos",
-                    )
-                  }
-                  className={`rounded-lg border px-3 py-2 text-xs font-bold transition ${
-                    reminderFilter === value
-                      ? "border-[#C9A227] bg-[#fff4cf] text-[#8A6A16]"
-                      : "border-border bg-white text-muted-foreground hover:bg-secondary"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {remindersLoading ? (
-              <div className="py-12 text-center text-sm text-muted-foreground">
-                Carregando lembretes...
-              </div>
-            ) : remindersError ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
-                {remindersError}
-              </div>
-            ) : filteredReminders.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-border bg-secondary/20 py-14 text-center">
-                <CalendarClock className="mx-auto h-10 w-10 text-muted-foreground/40" />
-                <h3 className="mt-3 font-semibold">
-                  Nenhum lembrete encontrado
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Não existem lembretes nesse período.
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-3">
-                {filteredReminders.map((reminder) => (
-                  <div
-                    key={reminder.id}
-                    className={`rounded-xl border p-4 ${reminderTone(
-                      reminder,
-                    )}`}
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="font-bold">
-                            {reminder.patientName ||
-                              patients.find(
-                                (item) =>
-                                  item.id === reminder.patientId,
-                              )?.fullName ||
-                              "Paciente"}
-                          </h3>
-
-                          <span className="rounded-full border border-current/20 bg-white/60 px-2 py-0.5 text-[10px] font-extrabold uppercase">
-                            {reminderStatusLabel(reminder)}
-                          </span>
-
-                          <span className="rounded-full bg-white/60 px-2 py-0.5 text-[10px] font-bold uppercase">
-                            {reminder.priority}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 flex items-start gap-2">
-                          <CalendarClock className="mt-0.5 h-4 w-4 shrink-0" />
-
-                          <div>
-                            <p className="text-sm font-bold">
-                              {reminder.title}
-                            </p>
-
-                            <p className="mt-0.5 text-xs font-medium opacity-75">
-                              {reminderDateLabel(
-                                reminder.reminderDate,
-                              )}
-                            </p>
-                          </div>
-                        </div>
-
-                        {reminder.description && (
-                          <p className="mt-2 text-sm leading-relaxed opacity-85">
-                            {reminder.description}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            router.navigate({
-                              to: `/pacientes/${reminder.patientId}`,
-                              search: {
-                                tab: "lembretes",
-                              } as any,
-                            })
-                          }
-                          className="agenda-btn-secondary inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                          Ficha
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openReminderWhatsApp(reminder)
-                          }
-                          className="agenda-btn-secondary inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold"
-                        >
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          WhatsApp
-                        </button>
-
-                        {reminder.status === "pendente" && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={
-                                reminderBusyId === reminder.id
-                              }
-                              onClick={() =>
-                                void postponeReminder(reminder, 7)
-                              }
-                              className="agenda-btn-secondary inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                              +7 dias
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                createAppointmentFromReminder(
-                                  reminder,
-                                )
-                              }
-                              className="agenda-btn-primary inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold"
-                            >
-                              <Calendar className="h-3.5 w-3.5" />
-                              Agendar
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={
-                                reminderBusyId === reminder.id
-                              }
-                              onClick={() =>
-                                void completeReminder(reminder)
-                              }
-                              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100"
-                            >
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Concluir
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <button
-              type="button"
-              onClick={() => setRemindersModalOpen(false)}
-              className="agenda-btn-secondary h-9 rounded-lg px-4 text-sm font-bold"
-            >
-              Fechar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* ── Modal: New / Edit Appointment ──────────────────────────────────── */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
@@ -1494,6 +946,25 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
               </select>
             </div>
 
+            {/* Treatment plan (only if patient selected and plans exist) */}
+            {selectedPatientId && patientPlans.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
+                  Plano de Tratamento <span className="text-muted-foreground font-normal">(opcional)</span>
+                </label>
+                <select
+                  value={draft.treatmentPlanId || ""}
+                  onChange={e => setDraft({ ...draft, treatmentPlanId: e.target.value || undefined })}
+                  className="h-10 w-full rounded-lg border border-gray-300 bg-white text-gray-900 px-3 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition"
+                >
+                  <option value="">Selecione...</option>
+                  {patientPlans.map(plan => (
+                    <option key={plan.id} value={plan.id}>{plan.title} ({plan.status})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Notes */}
             <div>
               <label className="block text-xs font-semibold text-foreground/80 mb-1.5">
@@ -1506,83 +977,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
                 rows={3}
                 className="min-h-[80px] w-full rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#C9A227]/40 focus:border-[#C9A227] transition resize-none"
               />
-            </div>
-
-            {/* Agendamento com parceiro */}
-            <div className="rounded-xl border border-border bg-[#fcfbf8] p-4">
-              <div className="flex items-center gap-2.5">
-                <input
-                  type="checkbox"
-                  id="withPartner"
-                  checked={draft.withPartner ?? false}
-                  onChange={(event) =>
-                    setDraft((current) => ({
-                      ...current,
-                      withPartner: event.target.checked,
-                      partnerName: event.target.checked
-                        ? current.partnerName || ""
-                        : undefined,
-                      partnerReason: event.target.checked
-                        ? current.partnerReason || ""
-                        : undefined,
-                    }))
-                  }
-                  className="h-4 w-4 rounded border-gray-300 accent-[#C9A227]"
-                />
-
-                <label
-                  htmlFor="withPartner"
-                  className="cursor-pointer select-none text-sm font-bold text-foreground"
-                >
-                  Marcar com parceiro
-                </label>
-              </div>
-
-              <p className="mt-1 pl-6 text-xs text-muted-foreground">
-                Use quando o atendimento precisar do auxílio de outro dentista.
-              </p>
-
-              {draft.withPartner && (
-                <div className="mt-4 grid gap-4">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-foreground/80">
-                      Dentista parceiro <span className="text-red-500">*</span>
-                    </label>
-
-                    <input
-                      type="text"
-                      value={draft.partnerName || ""}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          partnerName: event.target.value,
-                        }))
-                      }
-                      placeholder="Ex.: Dra. Ana Paula"
-                      className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-900 outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/40"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-foreground/80">
-                      Motivo da participação
-                    </label>
-
-                    <textarea
-                      value={draft.partnerReason || ""}
-                      onChange={(event) =>
-                        setDraft((current) => ({
-                          ...current,
-                          partnerReason: event.target.value,
-                        }))
-                      }
-                      placeholder="Ex.: Auxílio em cirurgia, avaliação conjunta..."
-                      rows={3}
-                      className="min-h-[76px] w-full resize-none rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none transition focus:border-[#C9A227] focus:ring-2 focus:ring-[#C9A227]/40"
-                    />
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* WhatsApp reminder checkbox */}

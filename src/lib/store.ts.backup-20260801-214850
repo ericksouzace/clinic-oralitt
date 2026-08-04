@@ -140,7 +140,6 @@ export interface TreatmentPlanItem {
   description?: string;
   priority: "baixa" | "média" | "alta" | "urgente";
   estimatedPrice?: number;
-  sortOrder?: number;
   status: "planejado" | "aprovado" | "em execução" | "concluído" | "cancelado";
   createdAt: string;
   updatedAt: string;
@@ -182,12 +181,6 @@ export interface Appointment {
   type: AppointmentType;
   notes?: string;
   whatsappReminder: boolean;
-
-  // Atendimento realizado com auxílio de outro profissional
-  withPartner?: boolean;
-  partnerName?: string;
-  partnerReason?: string;
-
   createdAt: string;
   updatedAt: string;
 
@@ -232,39 +225,6 @@ export interface ClinicalRecord {
   // Virtual fields
   procedureName?: string;
   supplies?: ClinicalRecordSupply[];
-}
-
-
-export type ReminderPriority = "baixa" | "normal" | "alta" | "urgente";
-
-export type ReminderStatus =
-  | "pendente"
-  | "agendado"
-  | "concluído"
-  | "cancelado";
-
-export interface PatientReminder {
-  id: string;
-  userId: string;
-  patientId: string;
-  clinicalRecordId?: string;
-  appointmentId?: string;
-  title: string;
-  description?: string;
-  reminderDate: string;
-  priority: ReminderPriority;
-  status: ReminderStatus;
-  responsibleName?: string;
-  completedAt?: string;
-  completionReason?: string;
-  postponedCount: number;
-  createdAt: string;
-  updatedAt: string;
-
-  // Campos virtuais
-  patientName?: string;
-  patientPhone?: string;
-  clinicalRecordDescription?: string;
 }
 
 // --- Financeiro ---

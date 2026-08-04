@@ -9,7 +9,6 @@ import {
   Plus,
   Stethoscope,
   User,
-  UsersRound,
 } from "lucide-react";
 import type { Appointment, AppointmentStatus } from "@/lib/store";
 
@@ -103,25 +102,6 @@ function AppointmentCard({
           </span>
         </div>
       </div>
-
-      {app.withPartner && (
-        <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-800">
-          <div className="flex items-center gap-1.5 font-bold">
-            <UsersRound className="h-3.5 w-3.5" />
-            Com parceiro
-          </div>
-
-          <div className="mt-1 font-semibold">
-            {app.partnerName || "Profissional não informado"}
-          </div>
-
-          {app.partnerReason && (
-            <div className="mt-1 text-[11px] leading-relaxed text-violet-700">
-              {app.partnerReason}
-            </div>
-          )}
-        </div>
-      )}
 
       {app.notes && (
         <p className="rounded-lg border border-border/50 bg-gray-50 px-3 py-2 text-[11px] italic leading-relaxed text-muted-foreground">

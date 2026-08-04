@@ -55,7 +55,6 @@ import {
 import { OdontogramTab } from "@/components/odontogram/OdontogramTab";
 import { TreatmentPlanTab } from "@/components/treatment-plan/TreatmentPlanTab";
 import { ClinicalRecordTab } from "@/components/clinical-record/ClinicalRecordTab";
-import { PatientRemindersTab } from "@/components/reminders/PatientRemindersTab";
 import { FinanceTab } from "@/components/finance/FinanceTab";
 import { PatientPersonalDataTab } from "@/components/patient/PatientPersonalDataTab";
 import { getWhatsAppLogs } from "@/lib/whatsapp";
@@ -85,7 +84,6 @@ const TAB_MAP = {
   odontograma: "Odontograma",
   "plano-tratamento": "Plano de tratamento",
   "ficha-clinica": "Ficha clínica",
-  lembretes: "Lembretes",
   financeiro: "Financeiro",
   "fotos-clinicas": "Fotos clínicas",
   documentos: "Documentos",
@@ -1087,8 +1085,6 @@ function PatientProfilePage() {
 
         {activeTab === "ficha-clinica" && <ClinicalRecordTab patientId={patient.id} />}
 
-        {activeTab === "lembretes" && <PatientRemindersTab patientId={patient.id} />}
-
         {activeTab === "documentos" && <DocumentsTab patientId={patient.id} />}
 
         {activeTab !== "resumo" &&
@@ -1099,7 +1095,6 @@ function PatientProfilePage() {
           activeTab !== "financeiro" &&
           activeTab !== "fotos-clinicas" &&
           activeTab !== "ficha-clinica" &&
-          activeTab !== "lembretes" &&
           activeTab !== "documentos" && (
             <div className="py-24 text-center">
               <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-secondary text-muted-foreground mb-4">

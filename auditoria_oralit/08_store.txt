@@ -1,0 +1,472 @@
+=== STORE ===
+26-  name: string;
+27-  category: string;
+28-  defaultMinutes: number;
+29-  labCost?: number;
+30-  otherDirect?: number;
+31-  note?: string;
+32-  suggestedPrice?: number;
+33-  suggestedPricePix?: number;
+34-};
+35-
+36-export type Settings = {
+37-  marginPct: number; // %
+38-  reservePct: number;
+39-  taxPct: number;
+40-  cardFeePct: number;
+41-  daysPerMonth: number;
+42-  hoursPerDay: number;
+43-  rounding: number; // 0, 5, 10, 50, 100
+44-};
+45-
+46:export type PatientStatus =
+47-  | "inativo"
+48-  | "em tratamento"
+49-  | "em acompanhamento"
+50-  | "marcar c/ parceiros";
+51-
+52:export type Patient = {
+53-  id: string;
+54-  recordNumber?: string;
+55-  fullName: string;
+56-  referenceNote?: string;
+57-  cpf?: string;
+58-  rg?: string;
+59-  issuingAgency?: string;
+60-  birthDate?: string; // YYYY-MM-DD
+61-  gender?: string;
+62-  maritalStatus?: string;
+63-  profession?: string;
+64-  phone?: string;
+65-  whatsapp?: string;
+66-  address?: string;
+67-  administrativeNotes?: string;
+68:  status: PatientStatus;
+69-  invoicePreference?: boolean | null;
+70-  createdAt: string;
+71-};
+72-
+73-export type AnamnesisStatus = "rascunho" | "concluída" | "assinada";
+74-
+75-export type Anamnesis = {
+76-  id: string;
+77-  patientId: string;
+78-  mainComplaint?: string;
+79-  medications?: string;
+80-  allergies?: string;
+81-  bloodPressure?: string;
+82-  heartProblem?: boolean;
+83-  diabetes?: boolean;
+84-  bleedingProblem?: boolean;
+85-  healingProblem?: boolean;
+86-  previousSurgery?: boolean;
+87-  pregnancy?: boolean;
+88-  healthProblems?: string;
+89-  anesthesiaReaction?: boolean;
+90-  toothOrGumPain?: string;
+91-  gumBleeding?: boolean;
+92-  brushingFrequency?: string;
+93-  flossUse?: string;
+94-  smoker?: boolean;
+95-  truthDeclaration?: boolean;
+96-  signature?: string;
+97-  status: AnamnesisStatus;
+98-  notes?: string;
+99-  createdAt: string;
+100-  updatedAt: string;
+101-};
+102-
+103-export type ToothStatusType = (typeof TOOTH_STATUS)[number];
+104-
+105-export interface OdontogramEntry {
+106-  id: string;
+107-  userId: string;
+108-  patientId?: string;
+109-  toothNumber: string;
+110-  toothRegion: string;
+111-  status: string;
+112-  color: string;
+113-  notes?: string;
+114-  createdAt: string;
+115-  updatedAt: string;
+116-}
+117-
+118-export interface TreatmentPlan {
+119-  id: string;
+120-  userId: string;
+121-  patientId: string;
+122-  title: string;
+123-  diagnosis?: string;
+124-  notes?: string;
+125-  status: "planejado" | "em andamento" | "concluído" | "pausado" | "cancelado";
+126-  startDate?: string;
+127-  expectedEndDate?: string;
+128-  createdAt: string;
+129-  updatedAt: string;
+130-  items?: TreatmentPlanItem[];
+131-}
+132-
+133-export interface TreatmentPlanItem {
+134-  id: string;
+135-  userId: string;
+136-  treatmentPlanId: string;
+137-  procedureId?: string;
+138-  toothNumber?: string;
+139-  toothRegion?: string;
+140-  description?: string;
+141-  priority: "baixa" | "média" | "alta" | "urgente";
+142-  estimatedPrice?: number;
+143-  sortOrder?: number;
+144-  status: "planejado" | "aprovado" | "em execução" | "concluído" | "cancelado";
+145-  createdAt: string;
+146-  updatedAt: string;
+147-
+148-  // Virtual field mapped for UI display if needed
+149-  procedureName?: string;
+150-}
+151-
+152:export type AppointmentStatus =
+153-  | "agendado"
+154-  | "confirmado"
+155-  | "em atendimento"
+156-  | "concluído"
+157-  | "faltou"
+158-  | "cancelado"
+159-  | "remarcado";
+160-
+161:export type AppointmentType =
+162-  | "consulta"
+163-  | "avaliação"
+164-  | "retorno"
+165-  | "procedimento"
+166-  | "emergência"
+167-  | "manutenção"
+168-  | "orçamento"
+169-  | "outro";
+170-
+171:export interface Appointment {
+172-  id: string;
+173-  userId: string;
+174-  patientId: string;
+175-  procedureId?: string;
+176-  treatmentPlanId?: string;
+177-  title: string;
+178-  appointmentDate: string; // YYYY-MM-DD
+179-  startTime: string; // HH:MM
+180-  endTime: string; // HH:MM
+181:  status: AppointmentStatus;
+182:  type: AppointmentType;
+183-  notes?: string;
+184-  whatsappReminder: boolean;
+185-  createdAt: string;
+186-  updatedAt: string;
+187-
+188-  // Virtual / joined fields for UI helper mapping:
+189-  patientName?: string;
+190-  patientPhone?: string;
+191-  procedureName?: string;
+192-  treatmentPlanTitle?: string;
+193-}
+194-
+195:export interface ClinicalRecordSupply {
+196-  id: string;
+197-  userId: string;
+198-  clinicalRecordId: string;
+199-  patientId: string;
+200-  supplyId?: string;
+201-  quantityUsed: number;
+202-  unitCost: number;
+203-  totalCost: number;
+204-  createdAt: string;
+205-
+206-  // Virtual field mapped for UI display
+207-  supplyName?: string;
+208-}
+209-
+210:export interface ClinicalRecord {
+211-  id: string;
+212-  userId: string;
+213-  patientId: string;
+214-  procedureId?: string;
+215-  recordDate: string;
+216-  teeth?: string[];
+217-  description?: string;
+218-  notes?: string;
+219-  chargedAmount: number;
+220-  realCost: number;
+221-  estimatedProfit: number;
+222-  signature?: string;
+223-  createdAt: string;
+224-  updatedAt: string;
+225-
+226-  // Virtual fields
+227-  procedureName?: string;
+228:  supplies?: ClinicalRecordSupply[];
+229-}
+230-
+231-// --- Financeiro ---
+232-export interface Budget {
+233-  id: string;
+234-  userId: string;
+235-  patientId: string;
+236-  treatmentPlanId?: string;
+237-  title?: string;
+238-  totalAmount: number;
+239-  discount: number;
+240-  finalAmount: number;
+241-  status: "rascunho" | "enviado" | "aprovado" | "recusado" | "vencido" | "cancelado";
+242-  validUntil?: string;
+243-  notes?: string;
+244-  createdAt: string;
+245-  updatedAt: string;
+246-
+247-  // Virtual
+248-  items?: BudgetItem[];
+249-}
+250-
+251-export interface BudgetItem {
+252-  id: string;
+253-  userId: string;
+254-  budgetId: string;
+255-  procedureId?: string;
+256-  toothNumber?: string;
+257-  toothRegion?: string;
+258-  description?: string;
+259-  quantity: number;
+260-  unitPrice: number;
+261-  totalPrice: number;
+262-  createdAt: string;
+263-
+264-  // Virtual
+265-  procedureName?: string;
+266-}
+267-
+268:export interface PaymentInstallment {
+269-  id: string;
+270-  userId: string;
+271-  patientId: string;
+272-  budgetId: string;
+273-  installmentNumber: number;
+274-  amount: number;
+275-  paidAmount: number;
+276-  remainingAmount: number;
+277-  dueDate?: string;
+278-  status: "pendente" | "parcialmente pago" | "pago" | "atrasado" | "cancelado" | "renegociado";
+279-  notes?: string;
+280-  createdAt: string;
+281-  updatedAt: string;
+282-}
+283-
+284:export interface Payment {
+285-  id: string;
+286-  userId: string;
+287-  patientId: string;
+288-  budgetId?: string;
+289-  installmentId?: string;
+290-  amount: number;
+291-  paymentMethod?: string;
+292-  paymentDate?: string;
+293-  cardFee: number;
+294-  netAmount: number;
+295-  notes?: string;
+296-  attachmentUrl?: string;
+297-  createdAt: string;
+298-
+299-  // Virtual
+300:  splits?: PaymentSplit[];
+301-}
+302-
+303:export interface PaymentSplit {
+304-  id: string;
+305-  userId: string;
+306-  paymentId: string;
+307-  paymentMethod: string;
+308-  amount: number;
+309-  createdAt: string;
+310-}
+311-
+312:export type PatientFileType = "foto_clinica" | "documento";
+313-
+314:export interface PatientFile {
+315-  id: string;
+316-  userId: string;
+317-  patientId?: string | null;
+318-  fileName: string;
+319-  filePath: string;
+320-  fileSize: number;
+321-  contentType: string;
+322-  fileType: PatientFileType;
+323-  category: string;
+324-  status: string;
+325-  notes?: string;
+326-  // OCR fields
+327-  ocrStatus?: string;
+328-  extractedText?: string;
+329-  ocrDestinationSuggestion?: string;
+330-  isOcrProcessed?: boolean;
+331-  reviewedAt?: string;
+332-  createdAt: string;
+333-  updatedAt: string;
+334-
+335-  // Virtual for UI
+336-  url?: string;
+337-}
+338-
+339-export const PHOTO_CATEGORIES = [
+340-  "intraoral",
+341-  "extraoral",
+342-  "sorriso",
+343-  "antes",
+344-  "depois",
+345-  "radiografia",
+346-  "procedimento",
+347-  "evolução",
+348-  "outro",
+349-];
+350-
+351-export const DOCUMENT_CATEGORIES = [
+352-  "contrato",
+353-  "termo",
+354-  "exame",
+355-  "radiografia",
+356-  "receita",
+357-  "atestado",
+358-  "orçamento",
+359-  "comprovante",
+360-  "documento pessoal",
+361-  "outro",
+362-];
+363-
+364-export type FixedCostFrequency = "mensal" | "anual" | "bimestral" | "trimestral" | "semestral";
+365-
+366-export type SupplyUsage = { supplyId: string; qty: number };
+367-export type CustomCost = { name: string; value: number };
+368-
+369-export type HistoryItem = {
+370-  id: string;
+371-  createdAt: number;
+372-  procedureId: string;
+373-  procedureName: string;
+374-  minutes: number;
+375-  labCost: number;
+376-  otherDirect: number;
+377-  supplies: SupplyUsage[];
+378-  customCosts: CustomCost[];
+379-  result: {
+380-    suppliesCost: number;
+381-    fixedProportional: number;
+382-    realCost: number;
+383-    targetPrice: number;
+384-    pricePix: number;
+385-    priceCard: number;
+386-    estimatedProfit: number;
+387-    netMargin: number;
+388-  };
+389-  settings: Settings;
+390-};
+391-
+392-export const DEFAULT_SETTINGS: Settings = {
+393-  marginPct: 30,
+394-  reservePct: 5,
+--
+413-  "Biossegurança",
+414-  "Laboratório",
+415-  "Outro",
+416-];
+417-
+418-export const PROCEDURE_CATEGORIES = [
+419-  "Consulta",
+420-  "Profilaxia",
+421-  "Restauração",
+422-  "Clareamento",
+423-  "Endodontia",
+424-  "Cirurgia",
+425-  "Periodontia",
+426-  "Prótese",
+427-  "Ortodontia",
+428-  "Implantodontia",
+429-  "Radiologia",
+430-  "Outro",
+431-];
+432-
+433:export const PATIENT_STATUS: PatientStatus[] = [
+434-  "inativo",
+435-  "em tratamento",
+436-  "em acompanhamento",
+437-  "marcar c/ parceiros",
+438-];
+439-
+440-export const PATIENT_GENDERS = ["Masculino", "Feminino", "Outro"];
+441-
+442-export const PATIENT_MARITAL_STATUSES = [
+443-  "Solteiro(a)",
+444-  "Casado(a)",
+445-  "Divorciado(a)",
+446-  "Viúvo(a)",
+447-  "Separado(a)",
+448-  "Outro",
+449-];
+450-
+451-export const ANAMNESIS_STATUS: AnamnesisStatus[] = ["rascunho", "concluída", "assinada"];
+452-
+453-export const TOOTH_REGIONS = [
+454-  "inteiro",
+455-  "superior esquerdo",
+456-  "superior direito",
+457-  "inferior esquerdo",
+458-  "inferior direito",
+459-  "centro",
+460-  "raiz/base",
+461-];
+462-
+463-export const TOOTH_STATUS = [
+464-  "cárie",
+465-  "restauração",
+466-  "amálgama",
+467-  "canal",
+468-  "coroa",
+469-  "implante",
+470-  "dor",
+471-  "ausente",
+472-  "extração indicada",
+473-  "extração realizada",
+474-];
+475-
+476-export const STATUS_COLORS: Record<string, string> = {
+477-  cárie: "#ef4444",
+478-  restauração: "#3b82f6",
+479-  amálgama: "#94a3b8",
+480-  canal: "#a855f7",
+481-  coroa: "#fbbf24",
+482-  implante: "#a16207",
+483-  dor: "#f97316",
+484-  ausente: "#cbd5e1",
+485-  "extração indicada": "#991b1b",
+486-  "extração realizada": "#1e293b",
+487-};
+488-
+489-const listeners = new Map<string, Set<() => void>>();
+490-
+491-function emit(key: string) {
+492-  listeners.get(key)?.forEach((fn) => fn());
+493-}
+494-
+495-function read<T>(key: string, fallback: T): T {
+496-  if (typeof window === "undefined") return fallback;
+497-  try {
+498-    const raw = localStorage.getItem(PREFIX + key);
+499-    if (!raw) return fallback;
+500-    return JSON.parse(raw) as T;
+501-  } catch {
+502-    return fallback;
+503-  }
+504-}
+505-
+506-function write<T>(key: string, value: T) {
+507-  if (typeof window === "undefined") return;
+508-  localStorage.setItem(PREFIX + key, JSON.stringify(value));
+509-  emit(key);
+510-}
+511-
+512-export function usePersisted<T>(key: string, fallback: T): [T, (v: T | ((p: T) => T)) => void] {
+513-  const subscribe = useCallback(
