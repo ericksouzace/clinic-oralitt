@@ -333,11 +333,11 @@ function PatientProfilePage() {
         </Button>
       </div>
 
-      <Card className="mb-6 overflow-hidden border border-border bg-white p-0">
-        <div className="flex flex-col gap-5 px-6 py-5 lg:flex-row lg:items-center lg:justify-between">
+      <Card className="mb-6 border border-border bg-white px-5 py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="truncate font-display text-2xl font-bold text-foreground">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="truncate font-display text-xl font-bold text-foreground">
                 {patient.fullName}
               </h1>
 
@@ -356,53 +356,44 @@ function PatientProfilePage() {
             </div>
 
             {age !== null && (
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 {age} anos
               </p>
             )}
           </div>
 
-          {primaryReminder ? (
+          {primaryReminder && (
             <button
               type="button"
               onClick={() => setActiveTab("lembretes")}
-              className={`group w-full rounded-2xl border p-4 text-left transition hover:shadow-sm lg:max-w-[520px] ${
-                reminderDifference(
-                  primaryReminder.reminderDate,
-                ) < 0
-                  ? "border-rose-200 bg-rose-50"
-                  : reminderDifference(
-                        primaryReminder.reminderDate,
-                      ) <= 7
-                    ? "border-amber-300 bg-amber-50"
-                    : "border-yellow-200 bg-yellow-50"
+              title="Abrir lembretes do paciente"
+              className={`group flex max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:shadow-sm sm:max-w-[390px] ${
+                reminderDifference(primaryReminder.reminderDate) < 0
+                  ? "border-rose-200 bg-rose-50/70"
+                  : reminderDifference(primaryReminder.reminderDate) <= 7
+                    ? "border-amber-200 bg-amber-50/70"
+                    : "border-border bg-secondary/20"
               }`}
             >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${
-                    reminderDifference(
-                      primaryReminder.reminderDate,
-                    ) < 0
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  {reminderDifference(
-                    primaryReminder.reminderDate,
-                  ) < 0 ? (
-                    <AlertTriangle className="h-4 w-4" />
-                  ) : (
-                    <Bell className="h-4 w-4" />
-                  )}
-                </div>
+              <div
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                  reminderDifference(primaryReminder.reminderDate) < 0
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {reminderDifference(primaryReminder.reminderDate) < 0 ? (
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                ) : (
+                  <Bell className="h-3.5 w-3.5" />
+                )}
+              </div>
 
-                <div className="min-w-0 flex-1">
-                  <div
-                    className={`text-[11px] font-extrabold uppercase tracking-wide ${
-                      reminderDifference(
-                        primaryReminder.reminderDate,
-                      ) < 0
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span
+                    className={`text-[10px] font-extrabold uppercase tracking-wide ${
+                      reminderDifference(primaryReminder.reminderDate) < 0
                         ? "text-rose-700"
                         : "text-amber-800"
                     }`}
@@ -410,57 +401,26 @@ function PatientProfilePage() {
                     {reminderProximityLabel(
                       primaryReminder.reminderDate,
                     )}
-                  </div>
+                  </span>
 
-                  <div className="mt-0.5 truncate text-sm font-bold text-foreground">
-                    {primaryReminder.title}
-                  </div>
-
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <CalendarClock className="h-3.5 w-3.5" />
-                      {reminderDateLabel(
-                        primaryReminder.reminderDate,
-                      )}
-                    </span>
-
-                    {additionalReminders > 0 && (
-                      <span className="font-semibold">
-                        +{additionalReminders}{" "}
-                        {additionalReminders === 1
-                          ? "outro lembrete"
-                          : "outros lembretes"}
-                      </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {reminderDateLabel(
+                      primaryReminder.reminderDate,
                     )}
-                  </div>
+                  </span>
                 </div>
 
-                <ChevronRight className="mt-2 h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
-              </div>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setActiveTab("lembretes")}
-              className="flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-border bg-secondary/20 px-4 py-3 text-left transition hover:border-gold/40 hover:bg-gold/5 lg:max-w-[420px]"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-                  <Bell className="h-4 w-4" />
-                </div>
-
-                <div>
-                  <div className="text-sm font-semibold text-foreground">
-                    Nenhum lembrete pendente
-                  </div>
-
-                  <div className="text-xs text-muted-foreground">
-                    Clique para abrir os lembretes do paciente.
-                  </div>
+                <div className="truncate text-xs font-semibold text-foreground">
+                  {primaryReminder.title}
+                  {additionalReminders > 0 && (
+                    <span className="ml-1 font-medium text-muted-foreground">
+                      +{additionalReminders}
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5" />
             </button>
           )}
         </div>
