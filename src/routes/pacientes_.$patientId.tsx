@@ -14,7 +14,6 @@ import {
   CheckCircle,
   Trash2,
   Clock,
-  MessageCircle,
   Bell,
   AlertTriangle,
   CalendarClock,
@@ -63,7 +62,6 @@ import { ClinicalRecordTab } from "@/components/clinical-record/ClinicalRecordTa
 import { PatientRemindersTab } from "@/components/reminders/PatientRemindersTab";
 import { FinanceTab } from "@/components/finance/FinanceTab";
 import { PatientPersonalDataTab } from "@/components/patient/PatientPersonalDataTab";
-import { getWhatsAppLogs } from "@/lib/whatsapp";
 import { ClinicalPhotosTab } from "@/components/patient-files/ClinicalPhotosTab";
 import { DocumentsTab } from "@/components/patient-files/DocumentsTab";
 import { toast } from "sonner";
@@ -165,26 +163,7 @@ function PatientProfilePage() {
 
   const latestEvolution = clinicalRecords && clinicalRecords.length > 0 ? clinicalRecords[0] : null;
 
-  const [patientLogs, setPatientLogs] = useState<any[]>([]);
 
-  useEffect(() => {
-    let active = true;
-    async function loadLogs() {
-      try {
-        const { logs: allLogs } = await getWhatsAppLogs();
-        if (active) {
-          const filtered = allLogs.filter((l) => l.patientId === patientId);
-          setPatientLogs(filtered);
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    loadLogs();
-    return () => {
-      active = false;
-    };
-  }, [patientId]);
 
   // Filter next and past appointments for resume tab
   const nextAppt = appointments.find((a) => {
@@ -840,78 +819,7 @@ function PatientProfilePage() {
                 )}
               </Card>
 
-              <Card className="p-5 mt-4">
-                <h3 className="font-display font-bold mb-4 flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4 text-[#C9A227]" /> Comunicações
-                </h3>
 
-                <div className="text-xs space-y-4">
-                  <div className="flex justify-between items-center bg-gray-50 border p-2.5 rounded-lg">
-                    <span className="font-semibold text-gray-700">Consentimento de Disparo:</span>
-                    <Badge tone="ok">Autorizado</Badge>
-                  </div>
-
-                  <div className="space-y-2">
-                    <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider block">
-                      Histórico de WhatsApp
-                    </span>
-                    {patientLogs.length === 0 ? (
-                      <p className="text-muted-foreground italic text-[11px] py-3 text-center border border-dashed rounded bg-gray-50/50">
-                        Nenhuma mensagem enviada.
-                      </p>
-                    ) : (
-                      <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-0.5">
-                        {patientLogs.map((l, idx) => (
-                          <div
-                            key={l.id || idx}
-                            className="p-2 border rounded bg-white text-[11px] space-y-1 hover:border-gold/30 transition"
-                          >
-                            <div className="flex justify-between items-center gap-2">
-                              <span className="text-muted-foreground font-semibold">
-                                {new Date(l.createdAt).toLocaleDateString("pt-BR")}
-                              </span>
-                              <Badge
-                                tone={
-                                  l.status === "enviada" || l.status === "aberta_manual"
-                                    ? "ok"
-                                    : l.status === "simulada"
-                                      ? "neutral"
-                                      : "danger"
-                                }
-                                className="text-[8px] px-1 py-0"
-                              >
-                                {l.status === "aberta_manual"
-                                  ? "Manual"
-                                  : l.status === "simulada"
-                                    ? "Simulada"
-                                    : l.status}
-                              </Badge>
-                            </div>
-                            <p className="line-clamp-2 text-gray-600 leading-relaxed italic">
-                              "{l.message}"
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    className="w-full text-xs h-8 font-bold mt-2"
-                    onClick={() => {
-                      router.navigate({
-                        to: "/whatsapp",
-                        search: {
-                          tab: "history",
-                        } as any,
-                      });
-                    }}
-                  >
-                    Abrir na Central WhatsApp
-                  </Button>
-                </div>
-              </Card>
             </div>
 
             <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4">
