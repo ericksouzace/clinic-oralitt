@@ -40,7 +40,6 @@ import {
   Stethoscope,
   Bell,
   CalendarClock,
-  MessageCircle,
   RotateCcw,
   Eye,
 } from "lucide-react";
@@ -501,7 +500,6 @@ export function AgendaPage() {
       endTime: "10:00",
       status: "agendado",
       type: "consulta",
-      whatsappReminder: true,
     });
     setSelectedPatientId(preselectedPatientId || "");
     setIsModalOpen(true);
@@ -585,7 +583,6 @@ export function AgendaPage() {
       status: (draft.status as AppointmentStatus) || "agendado",
       type: "consulta",
       notes: draft.notes,
-      whatsappReminder: draft.whatsappReminder ?? false,
       withPartner: draft.withPartner ?? false,
       partnerName: draft.withPartner
         ? draft.partnerName?.trim() || undefined
@@ -665,29 +662,6 @@ export function AgendaPage() {
   }
 
   // ── WhatsApp ──────────────────────────────────────────────────────────────
-  async function handleWhatsApp(app: Appointment) {
-    const patientDef = patients.find(p => p.id === app.patientId);
-    const rawPhone = app.patientPhone || patientDef?.phone || patientDef?.whatsapp || "";
-    if (!rawPhone) { 
-      toast.error("Paciente sem telefone cadastrado."); 
-      return; 
-    }
-
-    const [y, mo, d] = app.appointmentDate.split("-");
-    const dateFormatted = `${d}/${mo}/${y}`;
-
-    const params = new URLSearchParams({
-      patientId: app.patientId,
-      templateId: "tpl-confirmacao",
-      date: dateFormatted,
-      time: app.startTime,
-      profissional_nome: app.dentistName || "Dentista",
-      procedimento_nome: app.title || "Consulta"
-    });
-
-    window.location.href = `/whatsapp?${params.toString()}`;
-  }
-
   // ── Filtered appointments (respects global filters, ignores date) ─────────
   const filteredAll = useMemo(() => {
     return appointments.filter(app => {
@@ -835,37 +809,6 @@ export function AgendaPage() {
     } finally {
       setReminderBusyId(null);
     }
-  }
-
-  function openReminderWhatsApp(reminder: PatientReminder) {
-    const patient = patients.find(
-      (item) => item.id === reminder.patientId,
-    );
-
-    const rawPhone =
-      reminder.patientPhone ||
-      patient?.whatsapp ||
-      patient?.phone ||
-      "";
-
-    if (!rawPhone) {
-      toast.error("Paciente sem WhatsApp cadastrado.");
-      return;
-    }
-
-    const phone = cleanPhoneNumber(rawPhone);
-
-    const message = encodeURIComponent(
-      `Olá, ${reminder.patientName || patient?.fullName || ""}! Tudo bem? ` +
-        `Estamos entrando em contato pela Oralit para organizar seu retorno: ` +
-        `${reminder.title}. Data prevista: ${reminderDateLabel(reminder.reminderDate)}.`,
-    );
-
-    window.open(
-      `https://wa.me/${phone}?text=${message}`,
-      "_blank",
-      "noopener,noreferrer",
-    );
   }
 
   function createAppointmentFromReminder(
@@ -1316,16 +1259,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
                           Ficha
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openReminderWhatsApp(reminder)
-                          }
-                          className="agenda-btn-secondary inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-bold"
-                        >
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          WhatsApp
-                        </button>
 
                         {reminder.status === "pendente" && (
                           <>
@@ -1581,20 +1514,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* WhatsApp reminder checkbox */}
-            <div className="flex items-center gap-2.5 pt-1">
-              <input
-                type="checkbox"
-                id="whatsappReminder"
-                checked={draft.whatsappReminder ?? false}
-                onChange={e => setDraft({ ...draft, whatsappReminder: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 accent-[#C9A227]"
-              />
-              <label htmlFor="whatsappReminder" className="text-xs font-medium text-foreground/80 cursor-pointer select-none">
-                Registrar lembrete de WhatsApp para este atendimento
-              </label>
             </div>
 
           </div>
