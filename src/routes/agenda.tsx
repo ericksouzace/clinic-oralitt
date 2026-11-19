@@ -47,7 +47,6 @@ import {
 import { Input, Label, Select, Textarea } from "@/components/ui-bits";
 import { AgendaCalendar } from "@/components/agenda/AgendaCalendar";
 import { DayAppointmentsList } from "@/components/agenda/DayAppointmentsList";
-import { sendWhatsAppMessage, getWhatsAppTemplates, renderWhatsAppTemplate } from "@/lib/whatsapp";
 
 // ─── Route ───────────────────────────────────────────────────────────────────
 
@@ -1172,7 +1171,6 @@ ALTER TABLE public.appointments ALTER COLUMN title SET NOT NULL;`}</pre>
                 onOpenNew={() => openNewAppointment()}
                 onEdit={openEditAppointment}
                 onStatusChange={handleStatusChange}
-                onWhatsApp={handleWhatsApp}
                 onViewPatient={(patientId) =>
                   router.navigate({ to: `/pacientes/${patientId}` })
                 }
