@@ -1,10 +1,8 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import {
-  Package,
   LogOut,
   Users,
   Calendar,
-  MessageCircle,
   BrainCircuit,
   HardDrive,
 } from "lucide-react";
@@ -14,8 +12,6 @@ import { useAuth } from "@/components/AuthProvider";
 const NAV = [
   { to: "/pacientes", label: "Pacientes", icon: Users },
   { to: "/agenda", label: "Agenda", icon: Calendar },
-  { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
-  { to: "/insumos", label: "Estoque", icon: Package },
   { to: "/central-ia", label: "Modelos de Arquivo", icon: BrainCircuit },
   { to: "/armazenamento", label: "Armazenamento", icon: HardDrive },
 ] as const;
@@ -154,7 +150,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur lg:hidden">
-        <div className="grid grid-cols-6 gap-0.5 px-1 py-2">
+        <div className="grid grid-cols-4 gap-0.5 px-1 py-2">
           {NAV.map((item) => {
             const active = isActive(item.to);
             const Icon = item.icon;
