@@ -70,7 +70,6 @@ function AppointmentCard({
     id: string,
     status: AppointmentStatus,
   ) => void | Promise<void>;
-  onWhatsApp: (appointment: Appointment) => void;
   onViewPatient: (patientId: string) => void;
 }) {
   const confirmed = app.status === "confirmado";
@@ -171,7 +170,6 @@ export function DayAppointmentsList({
   onOpenNew,
   onEdit,
   onStatusChange,
-  onWhatsApp,
   onViewPatient,
 }: DayAppointmentsListProps) {
   const readableDate = formatDateReadable(selectedDate);
