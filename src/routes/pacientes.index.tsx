@@ -124,6 +124,28 @@ function PacientesPage() {
     patientBalances,
   ]);
 
+  const patientCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      todos: patients.length,
+      "saldo positivo": 0,
+      "saldo negativo": 0,
+    };
+
+    for (const status of PATIENT_STATUS) {
+      counts[status] = 0;
+    }
+
+    for (const patient of patients) {
+      counts[patient.status] = (counts[patient.status] || 0) + 1;
+
+      const balance = patientBalances[patient.id]?.balance || 0;
+      if (balance > 0.009) counts["saldo positivo"] += 1;
+      if (balance < -0.009) counts["saldo negativo"] += 1;
+    }
+
+    return counts;
+  }, [patients, patientBalances]);
+
   const remove = async (id: string) => {
     try {
       await setPatients((prev) => prev.filter((x) => x.id !== id));
@@ -367,25 +389,25 @@ function PacientesPage() {
                 }
               >
                 <option value="todos">
-                  Todos os pacientes
+                  Todos os pacientes ({patientCounts.todos})
                 </option>
 
                 <optgroup label="PACIENTES">
                   {PATIENT_STATUS.map((status) => (
                     <option key={status} value={status}>
                       {status.charAt(0).toUpperCase() +
-                        status.slice(1)}
+                        status.slice(1)} ({patientCounts[status] || 0})
                     </option>
                   ))}
                 </optgroup>
 
                 <optgroup label="FINANCEIRO">
                   <option value="saldo positivo">
-                    Saldo positivo — crédito
+                    Saldo positivo — crédito ({patientCounts["saldo positivo"]})
                   </option>
 
                   <option value="saldo negativo">
-                    Saldo negativo — pendência
+                    Saldo negativo — pendência ({patientCounts["saldo negativo"]})
                   </option>
                 </optgroup>
               </Select>
