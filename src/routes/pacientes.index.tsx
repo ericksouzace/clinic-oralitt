@@ -395,8 +395,21 @@ function PacientesPage() {
         </div>
       </Card>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className={statusFilter === "todos" ? "grid sm:grid-cols-2 lg:grid-cols-3 gap-4" : "space-y-2"}>
         {filtered.map((p) => {
+          if (statusFilter !== "todos") {
+            return (
+              <Card key={p.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <h3 className="min-w-0 flex-1 truncate font-display font-semibold text-base">{p.fullName}</h3>
+                <Link to="/pacientes/$patientId" params={{ patientId: p.id }} className="shrink-0">
+                  <Button variant="outline" className="h-9 text-xs">
+                    Abrir ficha
+                  </Button>
+                </Link>
+              </Card>
+            );
+          }
+
           const age = calcAge(p.birthDate);
 
           const financial =
