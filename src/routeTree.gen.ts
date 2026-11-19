@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as WhatsappRouteImport } from './routes/whatsapp'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as RecuperarSenhaRouteImport } from './routes/recuperar-senha'
@@ -17,7 +16,6 @@ import { Route as ProcedimentosRouteImport } from './routes/procedimentos'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PrecificarRouteImport } from './routes/precificar'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as InsumosRouteImport } from './routes/insumos'
 import { Route as HistoricoRouteImport } from './routes/historico'
 import { Route as DataDeletionRouteImport } from './routes/data-deletion'
 import { Route as CustosFixosRouteImport } from './routes/custos-fixos'
@@ -29,11 +27,7 @@ import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PacientesIndexRouteImport } from './routes/pacientes.index'
 import { Route as PacientesPatientIdRouteImport } from './routes/pacientes_.$patientId'
-import { Route as ApiWhatsappWebhookRouteImport } from './routes/api/whatsapp/webhook'
 
-const WhatsappRoute = WhatsappRouteImport.update({
-  id: '/whatsapp',
-  path: '/whatsapp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -71,9 +65,6 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const InsumosRoute = InsumosRouteImport.update({
-  id: '/insumos',
-  path: '/insumos',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HistoricoRoute = HistoricoRouteImport.update({
@@ -131,9 +122,6 @@ const PacientesPatientIdRoute = PacientesPatientIdRouteImport.update({
   path: '/pacientes/$patientId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiWhatsappWebhookRoute = ApiWhatsappWebhookRouteImport.update({
-  id: '/api/whatsapp/webhook',
-  path: '/api/whatsapp/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -147,7 +135,6 @@ export interface FileRoutesByFullPath {
   '/custos-fixos': typeof CustosFixosRoute
   '/data-deletion': typeof DataDeletionRoute
   '/historico': typeof HistoricoRoute
-  '/insumos': typeof InsumosRoute
   '/login': typeof LoginRoute
   '/precificar': typeof PrecificarRoute
   '/privacy': typeof PrivacyRoute
@@ -155,10 +142,8 @@ export interface FileRoutesByFullPath {
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/relatorios': typeof RelatoriosRoute
   '/terms': typeof TermsRoute
-  '/whatsapp': typeof WhatsappRoute
   '/pacientes/$patientId': typeof PacientesPatientIdRoute
   '/pacientes/': typeof PacientesIndexRoute
-  '/api/whatsapp/webhook': typeof ApiWhatsappWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -170,7 +155,6 @@ export interface FileRoutesByTo {
   '/custos-fixos': typeof CustosFixosRoute
   '/data-deletion': typeof DataDeletionRoute
   '/historico': typeof HistoricoRoute
-  '/insumos': typeof InsumosRoute
   '/login': typeof LoginRoute
   '/precificar': typeof PrecificarRoute
   '/privacy': typeof PrivacyRoute
@@ -178,10 +162,8 @@ export interface FileRoutesByTo {
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/relatorios': typeof RelatoriosRoute
   '/terms': typeof TermsRoute
-  '/whatsapp': typeof WhatsappRoute
   '/pacientes/$patientId': typeof PacientesPatientIdRoute
   '/pacientes': typeof PacientesIndexRoute
-  '/api/whatsapp/webhook': typeof ApiWhatsappWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -194,7 +176,6 @@ export interface FileRoutesById {
   '/custos-fixos': typeof CustosFixosRoute
   '/data-deletion': typeof DataDeletionRoute
   '/historico': typeof HistoricoRoute
-  '/insumos': typeof InsumosRoute
   '/login': typeof LoginRoute
   '/precificar': typeof PrecificarRoute
   '/privacy': typeof PrivacyRoute
@@ -202,10 +183,8 @@ export interface FileRoutesById {
   '/recuperar-senha': typeof RecuperarSenhaRoute
   '/relatorios': typeof RelatoriosRoute
   '/terms': typeof TermsRoute
-  '/whatsapp': typeof WhatsappRoute
   '/pacientes_/$patientId': typeof PacientesPatientIdRoute
   '/pacientes/': typeof PacientesIndexRoute
-  '/api/whatsapp/webhook': typeof ApiWhatsappWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -219,7 +198,6 @@ export interface FileRouteTypes {
     | '/custos-fixos'
     | '/data-deletion'
     | '/historico'
-    | '/insumos'
     | '/login'
     | '/precificar'
     | '/privacy'
@@ -227,10 +205,8 @@ export interface FileRouteTypes {
     | '/recuperar-senha'
     | '/relatorios'
     | '/terms'
-    | '/whatsapp'
     | '/pacientes/$patientId'
     | '/pacientes/'
-    | '/api/whatsapp/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -242,7 +218,6 @@ export interface FileRouteTypes {
     | '/custos-fixos'
     | '/data-deletion'
     | '/historico'
-    | '/insumos'
     | '/login'
     | '/precificar'
     | '/privacy'
@@ -250,10 +225,8 @@ export interface FileRouteTypes {
     | '/recuperar-senha'
     | '/relatorios'
     | '/terms'
-    | '/whatsapp'
     | '/pacientes/$patientId'
     | '/pacientes'
-    | '/api/whatsapp/webhook'
   id:
     | '__root__'
     | '/'
@@ -265,7 +238,6 @@ export interface FileRouteTypes {
     | '/custos-fixos'
     | '/data-deletion'
     | '/historico'
-    | '/insumos'
     | '/login'
     | '/precificar'
     | '/privacy'
@@ -273,10 +245,8 @@ export interface FileRouteTypes {
     | '/recuperar-senha'
     | '/relatorios'
     | '/terms'
-    | '/whatsapp'
     | '/pacientes_/$patientId'
     | '/pacientes/'
-    | '/api/whatsapp/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -289,7 +259,6 @@ export interface RootRouteChildren {
   CustosFixosRoute: typeof CustosFixosRoute
   DataDeletionRoute: typeof DataDeletionRoute
   HistoricoRoute: typeof HistoricoRoute
-  InsumosRoute: typeof InsumosRoute
   LoginRoute: typeof LoginRoute
   PrecificarRoute: typeof PrecificarRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -297,19 +266,12 @@ export interface RootRouteChildren {
   RecuperarSenhaRoute: typeof RecuperarSenhaRoute
   RelatoriosRoute: typeof RelatoriosRoute
   TermsRoute: typeof TermsRoute
-  WhatsappRoute: typeof WhatsappRoute
   PacientesPatientIdRoute: typeof PacientesPatientIdRoute
   PacientesIndexRoute: typeof PacientesIndexRoute
-  ApiWhatsappWebhookRoute: typeof ApiWhatsappWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/whatsapp': {
-      id: '/whatsapp'
-      path: '/whatsapp'
-      fullPath: '/whatsapp'
-      preLoaderRoute: typeof WhatsappRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -361,11 +323,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/insumos': {
-      id: '/insumos'
-      path: '/insumos'
-      fullPath: '/insumos'
-      preLoaderRoute: typeof InsumosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/historico': {
@@ -445,11 +402,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PacientesPatientIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/whatsapp/webhook': {
-      id: '/api/whatsapp/webhook'
-      path: '/api/whatsapp/webhook'
-      fullPath: '/api/whatsapp/webhook'
-      preLoaderRoute: typeof ApiWhatsappWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -465,7 +417,6 @@ const rootRouteChildren: RootRouteChildren = {
   CustosFixosRoute: CustosFixosRoute,
   DataDeletionRoute: DataDeletionRoute,
   HistoricoRoute: HistoricoRoute,
-  InsumosRoute: InsumosRoute,
   LoginRoute: LoginRoute,
   PrecificarRoute: PrecificarRoute,
   PrivacyRoute: PrivacyRoute,
@@ -473,10 +424,8 @@ const rootRouteChildren: RootRouteChildren = {
   RecuperarSenhaRoute: RecuperarSenhaRoute,
   RelatoriosRoute: RelatoriosRoute,
   TermsRoute: TermsRoute,
-  WhatsappRoute: WhatsappRoute,
   PacientesPatientIdRoute: PacientesPatientIdRoute,
   PacientesIndexRoute: PacientesIndexRoute,
-  ApiWhatsappWebhookRoute: ApiWhatsappWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
