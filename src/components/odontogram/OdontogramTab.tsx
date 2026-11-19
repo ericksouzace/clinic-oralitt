@@ -428,8 +428,8 @@ function OdontogramContent({ patientId }: Props) {
   const generalNotesChanged = generalNotes.trim() !== savedGeneralNotes.trim();
 
   return (
-    <div className="flex w-full flex-col gap-8">
-      <div className="grid w-full grid-cols-1 items-start gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="relative left-1/2 flex w-[calc(100vw-2rem)] -translate-x-1/2 flex-col gap-8 lg:w-[calc(100vw-20rem)]">
+      <div className="grid w-full grid-cols-1 items-start gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
         <OdontogramToolbar
           brushStatus={brushStatus}
           setBrushStatus={setBrushStatus}
