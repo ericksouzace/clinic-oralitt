@@ -5,7 +5,6 @@ import {
   Clock,
   Edit3,
   Eye,
-  MessageCircle,
   Plus,
   Stethoscope,
   User,
@@ -22,7 +21,6 @@ interface DayAppointmentsListProps {
     id: string,
     status: AppointmentStatus,
   ) => void | Promise<void>;
-  onWhatsApp: (appointment: Appointment) => void;
   onViewPatient: (patientId: string) => void;
 }
 
@@ -64,7 +62,6 @@ function AppointmentCard({
   app,
   onEdit,
   onStatusChange,
-  onWhatsApp,
   onViewPatient,
 }: {
   app: Appointment;
@@ -139,14 +136,6 @@ function AppointmentCard({
           Ficha
         </button>
 
-        <button
-          type="button"
-          onClick={() => onWhatsApp(app)}
-          className="agenda-btn-secondary inline-flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-bold transition-colors"
-        >
-          <MessageCircle className="h-3.5 w-3.5" />
-          WhatsApp
-        </button>
 
         <button
           type="button"
@@ -241,7 +230,6 @@ export function DayAppointmentsList({
               app={appointment}
               onEdit={onEdit}
               onStatusChange={onStatusChange}
-              onWhatsApp={onWhatsApp}
               onViewPatient={onViewPatient}
             />
           ))
