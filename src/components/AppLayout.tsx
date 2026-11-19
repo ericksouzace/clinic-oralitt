@@ -16,7 +16,7 @@ const NAV = [
   { to: "/agenda", label: "Agenda", icon: Calendar },
   { to: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
   { to: "/insumos", label: "Estoque", icon: Package },
-  { to: "/central-ia", label: "PDFs e Arquivos", icon: BrainCircuit },
+  { to: "/central-ia", label: "Modelos de Arquivo", icon: BrainCircuit },
   { to: "/armazenamento", label: "Armazenamento", icon: HardDrive },
 ] as const;
 
@@ -177,7 +177,7 @@ export default function AppLayout({ children }: { children?: ReactNode }) {
                     active ? "font-semibold text-foreground" : "text-muted-foreground"
                   }`}
                 >
-                  {item.label === "PDFs e Arquivos" ? "Arquivos" : item.label}
+                  {item.label}
                 </span>
               </Link>
             );
