@@ -55,14 +55,6 @@ export const Route = createFileRoute("/agenda")({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function cleanPhoneNumber(phone: string): string {
-  const cleaned = phone.replace(/\D/g, "");
-  if (cleaned.length === 0) return "";
-  if (cleaned.length <= 11) return "55" + cleaned;
-  return cleaned;
-}
-
-
 function reminderToday() {
   const date = new Date();
   const offset = date.getTimezoneOffset() * 60_000;
@@ -661,7 +653,6 @@ export function AgendaPage() {
     }
   }
 
-  // ── WhatsApp ──────────────────────────────────────────────────────────────
   // ── Filtered appointments (respects global filters, ignores date) ─────────
   const filteredAll = useMemo(() => {
     return appointments.filter(app => {
@@ -822,7 +813,6 @@ export function AgendaPage() {
       type: "consulta",
       title: reminder.title,
       notes: reminder.description || "",
-      whatsappReminder: true,
     });
 
     setSelectedPatientId(reminder.patientId);
